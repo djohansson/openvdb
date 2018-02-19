@@ -1671,7 +1671,7 @@ TestTools::testLevelSetMeasure()
     // First sphere
     openvdb::Vec3f C(0.35f, 0.35f, 0.35f);
     openvdb::Real r = 0.15, voxelSize = 1.0/(dim-1);
-    const openvdb::Real Pi = boost::math::constants::pi<openvdb::Real>();
+    const openvdb::Real Pi = openvdb::Real(3.141592653589793);
     GridT::Ptr sphere = openvdb::tools::createLevelSetSphere<GridT>(
         float(r), C, float(voxelSize));
 

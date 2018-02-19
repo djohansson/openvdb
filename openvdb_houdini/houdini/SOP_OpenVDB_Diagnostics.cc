@@ -51,8 +51,8 @@
   #include <hboost/mpl/at.hpp>
   namespace boostmpl = hboost::mpl;
 #else
-  #include <boost/mpl/at.hpp>
-  namespace boostmpl = boost::mpl;
+  #include <openvdb/external/brigand.hpp>
+  namespace boostmpl = brigand;
 #endif
 
 #include <memory>

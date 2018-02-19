@@ -41,9 +41,9 @@
 #include "Math.h"
 #include "Vec3.h"
 #include <openvdb/Types.h>
+#include <openvdb/external/brigand.hpp>
 #include <iostream>// for std::ostream
 #include <limits>// for std::numeric_limits<Type>::max()
-#include <boost/mpl/at.hpp>
 
 namespace openvdb {
 OPENVDB_USE_VERSION_NAMESPACE
@@ -172,7 +172,7 @@ template<typename TreeT, int NodeLevel>
 struct LevelSetHDDA
 {
     typedef typename TreeT::RootNodeType::NodeChainType ChainT;
-    typedef typename boost::mpl::at<ChainT, boost::mpl::int_<NodeLevel> >::type NodeT;
+    using NodeT = brigand::at_c<ChainT, NodeLevel>;
 
     template <typename TesterT>
     static bool test(TesterT& tester)
@@ -217,7 +217,7 @@ class VolumeHDDA
 public:
 
     typedef typename TreeT::RootNodeType::NodeChainType ChainT;
-    typedef typename boost::mpl::at<ChainT, boost::mpl::int_<ChildNodeLevel> >::type NodeT;
+    using NodeT = brigand::at_c<ChainT, ChildNodeLevel>;
     typedef typename RayT::TimeSpan TimeSpanT;
 
     VolumeHDDA() {}

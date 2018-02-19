@@ -130,36 +130,7 @@
     #define OPENVDB_NO_UNREACHABLE_CODE_WARNING_END
 #endif
 
-
-#ifdef _MSC_VER
-    /// Visual C++ does not have constants like M_PI unless this is defined.
-    /// @note This is needed even though the core library is built with this but
-    /// hcustom 12.1 doesn't define it. So this is needed for HDK operators.
-    #ifndef _USE_MATH_DEFINES
-        #define _USE_MATH_DEFINES
-    #endif
-    /// Visual C++ does not have round
-    #include <boost/math/special_functions/round.hpp>
-    using boost::math::round;
-#endif
-
-/// Visual C++ uses _copysign() instead of copysign()
-#ifdef _MSC_VER
-    #include <float.h>
-    static inline double copysign(double x, double y) { return _copysign(x, y); }
-#endif
-
-/// Visual C++ does not have stdint.h which defines types like uint64_t.
-/// So for portability we instead include boost/cstdint.hpp.
-#include <boost/cstdint.hpp>
-using boost::int8_t;
-using boost::int16_t;
-using boost::int32_t;
-using boost::int64_t;
-using boost::uint8_t;
-using boost::uint16_t;
-using boost::uint32_t;
-using boost::uint64_t;
+#include <cstdint>
 
 /// Helper macros for defining library symbol visibility
 #ifdef OPENVDB_EXPORT

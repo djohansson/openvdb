@@ -41,6 +41,7 @@
 
 #include <openvdb/version.h>
 #include <openvdb/Grid.h>
+#include <openvdb/external/brigand.hpp>
 #include <openvdb/tree/Tree.h>
 #include <openvdb/tree/LeafNode.h>
 #include <openvdb/tools/PointIndexGrid.h>
@@ -56,10 +57,6 @@
 #include <type_traits> // std::is_same
 #include <utility> // std::pair, std::make_pair
 #include <vector>
-
-#include <boost/mpl/vector.hpp>//for boost::mpl::vector
-#include <boost/mpl/push_back.hpp>
-#include <boost/mpl/back.hpp>
 
 class TestPointDataLeaf;
 
@@ -1206,7 +1203,7 @@ PointDataLeafNode<T, Log2Dim>::readBuffers(std::istream& is, const CoordBBox& /*
             std::string key("paged:" + std::to_string(index));
             auto it = auxData.find(key);
             if (it != auxData.end()) {
-                return *(boost::any_cast<compression::PagedInputStream::Ptr>(it->second));
+                return *(linb::any_cast<compression::PagedInputStream::Ptr>(it->second));
             }
             else {
                 compression::PagedInputStream::Ptr pagedStream = std::make_shared<compression::PagedInputStream>();
@@ -1250,7 +1247,7 @@ PointDataLeafNode<T, Log2Dim>::readBuffers(std::istream& is, const CoordBBox& /*
             std::string descriptorKey("descriptorPtr");
             auto itDescriptor = auxData.find(descriptorKey);
             assert(itDescriptor != auxData.end());
-            const Descriptor::Ptr descriptor = boost::any_cast<AttributeSet::Descriptor::Ptr>(itDescriptor->second);
+            const Descriptor::Ptr descriptor = linb::any_cast<AttributeSet::Descriptor::Ptr>(itDescriptor->second);
             return descriptor;
         }
     };
@@ -1372,7 +1369,7 @@ PointDataLeafNode<T, Log2Dim>::writeBuffers(std::ostream& os, bool toHalf) const
             std::string key("paged:" + std::to_string(index));
             auto it = auxData.find(key);
             if (it != auxData.end()) {
-                compression::PagedOutputStream& stream = *(boost::any_cast<compression::PagedOutputStream::Ptr>(it->second));
+                compression::PagedOutputStream& stream = *(linb::any_cast<compression::PagedOutputStream::Ptr>(it->second));
                 stream.flush();
                 (const_cast<io::StreamMetadata::AuxDataMap&>(auxData)).erase(it);
             }
@@ -1384,7 +1381,7 @@ PointDataLeafNode<T, Log2Dim>::writeBuffers(std::ostream& os, bool toHalf) const
             std::string key("paged:" + std::to_string(index));
             auto it = auxData.find(key);
             if (it != auxData.end()) {
-                return *(boost::any_cast<compression::PagedOutputStream::Ptr>(it->second));
+                return *(linb::any_cast<compression::PagedOutputStream::Ptr>(it->second));
             }
             else {
                 compression::PagedOutputStream::Ptr pagedStream = std::make_shared<compression::PagedOutputStream>();
@@ -1408,12 +1405,12 @@ PointDataLeafNode<T, Log2Dim>::writeBuffers(std::ostream& os, bool toHalf) const
             }
             else {
                 // if matching bool is found and is false, early exit (a previous descriptor did not match)
-                bool matching = boost::any_cast<bool>(itMatching->second);
+                bool matching = linb::any_cast<bool>(itMatching->second);
                 if (!matching)    return;
                 assert(itDescriptor != auxData.end());
                 // if matching bool is true, check whether the existing descriptor matches the current one and set
                 // matching bool to false if not
-                const Descriptor::Ptr existingDescriptor = boost::any_cast<AttributeSet::Descriptor::Ptr>(itDescriptor->second);
+                const Descriptor::Ptr existingDescriptor = linb::any_cast<AttributeSet::Descriptor::Ptr>(itDescriptor->second);
                 if (*existingDescriptor != *descriptor) {
                     (const_cast<io::StreamMetadata::AuxDataMap&>(auxData))[matchingKey] = false;
                 }
@@ -1427,7 +1424,7 @@ PointDataLeafNode<T, Log2Dim>::writeBuffers(std::ostream& os, bool toHalf) const
             // if matching key is not found, no matching descriptor
             if (itMatching == auxData.end())                return false;
             // if matching key is found and is false, no matching descriptor
-            if (!boost::any_cast<bool>(itMatching->second)) return false;
+            if (!linb::any_cast<bool>(itMatching->second)) return false;
             return true;
         }
 
@@ -1438,7 +1435,7 @@ PointDataLeafNode<T, Log2Dim>::writeBuffers(std::ostream& os, bool toHalf) const
             // if matching key is true, however descriptor is not found, it has already been retrieved
             if (itDescriptor == auxData.end())              return nullptr;
             // otherwise remove it and return it
-            const Descriptor::Ptr descriptor = boost::any_cast<AttributeSet::Descriptor::Ptr>(itDescriptor->second);
+            const Descriptor::Ptr descriptor = linb::any_cast<AttributeSet::Descriptor::Ptr>(itDescriptor->second);
             (const_cast<io::StreamMetadata::AuxDataMap&>(auxData)).erase(itDescriptor);
             return descriptor;
         }
@@ -1682,7 +1679,7 @@ void initialize();
 void uninitialize();
 
 
-/// @brief Recursive node chain which generates a boost::mpl::vector listing
+/// @brief Recursive node chain which generates a brigand::list listing
 /// value converted types of nodes to PointDataGrid nodes of the same configuration,
 /// rooted at RootNodeType in reverse order, from LeafNode to RootNode.
 /// See also TreeConverter<>.
@@ -1690,8 +1687,8 @@ template<typename HeadT, int HeadLevel>
 struct PointDataNodeChain
 {
     using SubtreeT = typename PointDataNodeChain<typename HeadT::ChildNodeType, HeadLevel-1>::Type;
-    using RootNodeT = tree::RootNode<typename boost::mpl::back<SubtreeT>::type>;
-    using Type = typename boost::mpl::push_back<SubtreeT, RootNodeT>::type;
+    using RootNodeT = tree::RootNode<brigand::back<SubtreeT>>;
+    using Type = brigand::push_back<SubtreeT, RootNodeT>;
 };
 
 // Specialization for internal nodes which require their embedded child type to
@@ -1700,8 +1697,8 @@ template <typename ChildT, Index Log2Dim, int HeadLevel>
 struct PointDataNodeChain<tree::InternalNode<ChildT, Log2Dim>, HeadLevel>
 {
     using SubtreeT = typename PointDataNodeChain<ChildT, HeadLevel-1>::Type;
-    using InternalNodeT = tree::InternalNode<typename boost::mpl::back<SubtreeT>::type, Log2Dim>;
-    using Type = typename boost::mpl::push_back<SubtreeT, InternalNodeT>::type;
+    using InternalNodeT = tree::InternalNode<brigand::back<SubtreeT>, Log2Dim>;
+    using Type = brigand::push_back<SubtreeT, InternalNodeT>;
 };
 
 // Specialization for the last internal node of a node chain, expected
@@ -1711,7 +1708,7 @@ struct PointDataNodeChain<tree::InternalNode<ChildT, Log2Dim>, /*HeadLevel=*/1>
 {
     using LeafNodeT = PointDataLeafNode<PointDataIndex32, ChildT::LOG2DIM>;
     using InternalNodeT = tree::InternalNode<LeafNodeT, Log2Dim>;
-    using Type = typename boost::mpl::vector<LeafNodeT, InternalNodeT>::type;
+    using Type = brigand::list<LeafNodeT, InternalNodeT>;
 };
 
 } // namespace internal
@@ -1724,7 +1721,7 @@ template <typename TreeType>
 struct TreeConverter {
     using RootNodeT = typename TreeType::RootNodeType;
     using NodeChainT = typename internal::PointDataNodeChain<RootNodeT, RootNodeT::LEVEL>::Type;
-    using Type = tree::Tree<typename boost::mpl::back<NodeChainT>::type>;
+    using Type = tree::Tree<brigand::back<NodeChainT>>;
 };
 
 

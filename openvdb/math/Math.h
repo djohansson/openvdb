@@ -37,7 +37,6 @@
 
 #include <openvdb/Platform.h>
 #include <openvdb/version.h>
-#include <boost/numeric/conversion/conversion_traits.hpp>
 #include <algorithm> // for std::max()
 #include <cassert>
 #include <cmath>     // for std::ceil(), std::fabs(), std::pow(), std::sqrt(), etc.
@@ -869,12 +868,6 @@ enum RotationOrder {
     ZYX_ROTATION,
     XZX_ROTATION,
     ZXZ_ROTATION
-};
-
-
-template <typename S, typename T>
-struct promote {
-    using type = typename boost::numeric::conversion_traits<S, T>::supertype;
 };
 
 

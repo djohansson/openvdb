@@ -497,82 +497,82 @@ inline bool operator!=(const Vec3<T0> &v0, const Vec3<T1> &v1) { return !(v0==v1
 
 /// Multiply each element of the given vector by @a scalar and return the result.
 template <typename S, typename T>
-inline Vec3<typename promote<S, T>::type> operator*(S scalar, const Vec3<T> &v) { return v*scalar; }
+inline auto operator*(S scalar, const Vec3<T> &v) -> Vec3<decltype(S() * T())> { return v*scalar; }
 
 /// Multiply each element of the given vector by @a scalar and return the result.
 template <typename S, typename T>
-inline Vec3<typename promote<S, T>::type> operator*(const Vec3<T> &v, S scalar)
+inline auto operator*(const Vec3<T> &v, S scalar) -> Vec3<decltype(S() * T())>
 {
-    Vec3<typename promote<S, T>::type> result(v);
+	Vec3<decltype(S() * T())> result(v);
     result *= scalar;
     return result;
 }
 
 /// Multiply corresponding elements of @a v0 and @a v1 and return the result.
 template <typename T0, typename T1>
-inline Vec3<typename promote<T0, T1>::type> operator*(const Vec3<T0> &v0, const Vec3<T1> &v1)
+inline auto operator*(const Vec3<T0> &v0, const Vec3<T1> &v1) -> Vec3<decltype(T0() * T1())>
 {
-    Vec3<typename promote<T0, T1>::type> result(v0[0] * v1[0], v0[1] * v1[1], v0[2] * v1[2]);
+	Vec3<decltype(T0() * T1())> result(v0[0] * v1[0], v0[1] * v1[1], v0[2] * v1[2]);
     return result;
 }
 
 
 /// Divide @a scalar by each element of the given vector and return the result.
 template <typename S, typename T>
-inline Vec3<typename promote<S, T>::type> operator/(S scalar, const Vec3<T> &v)
+inline auto operator/(S scalar, const Vec3<T> &v) -> Vec3<decltype(S() / T())>
 {
-    return Vec3<typename promote<S, T>::type>(scalar/v[0], scalar/v[1], scalar/v[2]);
+    return Vec3<decltype(S() / T())>(scalar/v[0], scalar/v[1], scalar/v[2]);
 }
 
 /// Divide each element of the given vector by @a scalar and return the result.
 template <typename S, typename T>
-inline Vec3<typename promote<S, T>::type> operator/(const Vec3<T> &v, S scalar)
+inline auto operator/(const Vec3<T> &v, S scalar) -> Vec3<decltype(S() / T())>
 {
-    Vec3<typename promote<S, T>::type> result(v);
+	Vec3<decltype(S() / T())> result(v);
     result /= scalar;
     return result;
 }
 
 /// Divide corresponding elements of @a v0 and @a v1 and return the result.
 template <typename T0, typename T1>
-inline Vec3<typename promote<T0, T1>::type> operator/(const Vec3<T0> &v0, const Vec3<T1> &v1)
+inline auto operator/(const Vec3<T0> &v0, const Vec3<T1> &v1) -> Vec3<decltype(T0() / T1())>
 {
-    Vec3<typename promote<T0, T1>::type> result(v0[0] / v1[0], v0[1] / v1[1], v0[2] / v1[2]);
+	Vec3<decltype(T0() / T1())> result(v0[0] / v1[0], v0[1] / v1[1], v0[2] / v1[2]);
     return result;
 }
 
 /// Add corresponding elements of @a v0 and @a v1 and return the result.
 template <typename T0, typename T1>
-inline Vec3<typename promote<T0, T1>::type> operator+(const Vec3<T0> &v0, const Vec3<T1> &v1)
+inline auto operator+(const Vec3<T0> &v0, const Vec3<T1> &v1) -> Vec3<decltype(T0() / T1())>
 {
-    Vec3<typename promote<T0, T1>::type> result(v0);
+	Vec3<decltype(T0() / T1())> result(v0);
     result += v1;
     return result;
 }
 
 /// Add @a scalar to each element of the given vector and return the result.
 template <typename S, typename T>
-inline Vec3<typename promote<S, T>::type> operator+(const Vec3<T> &v, S scalar)
+inline auto operator+(const Vec3<T> &v, S scalar) -> Vec3<decltype(S() + T())>
 {
-    Vec3<typename promote<S, T>::type> result(v);
+	Vec3<decltype(T() + S())> result(v);
     result += scalar;
     return result;
 }
 
 /// Subtract corresponding elements of @a v0 and @a v1 and return the result.
 template <typename T0, typename T1>
-inline Vec3<typename promote<T0, T1>::type> operator-(const Vec3<T0> &v0, const Vec3<T1> &v1)
+inline auto operator-(const Vec3<T0> &v0, const Vec3<T1> &v1) -> Vec3<decltype(T0() - T1())>
 {
-    Vec3<typename promote<T0, T1>::type> result(v0);
+	Vec3<decltype(T0() - T1())> result(v0);
     result -= v1;
     return result;
 }
 
 /// Subtract @a scalar from each element of the given vector and return the result.
 template <typename S, typename T>
-inline Vec3<typename promote<S, T>::type> operator-(const Vec3<T> &v, S scalar)
+inline auto operator-(const Vec3<T> &v, S scalar) -> Vec3<decltype(S() - T())>
 {
-    Vec3<typename promote<S, T>::type> result(v);
+	Vec3<decltype(S() - T())> result(v);
     result -= scalar;
     return result;
 }

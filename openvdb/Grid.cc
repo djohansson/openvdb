@@ -31,8 +31,7 @@
 #include "Grid.h"
 
 #include <openvdb/Metadata.h>
-#include <boost/algorithm/string/case_conv.hpp>
-#include <boost/algorithm/string/trim.hpp>
+#include <openvdb/util/Name.h>
 #include <tbb/mutex.h>
 
 
@@ -175,8 +174,8 @@ GridBase::stringToGridClass(const std::string& s)
 {
     GridClass ret = GRID_UNKNOWN;
     std::string str = s;
-    boost::trim(str);
-    boost::to_lower(str);
+    trim(str);
+	to_lower(str);
     if (str == gridClassToString(GRID_LEVEL_SET)) {
         ret = GRID_LEVEL_SET;
     } else if (str == gridClassToString(GRID_FOG_VOLUME)) {
@@ -249,8 +248,8 @@ GridBase::stringToVecType(const std::string& s)
 {
     VecType ret = VEC_INVARIANT;
     std::string str = s;
-    boost::trim(str);
-    boost::to_lower(str);
+	trim(str);
+	to_lower(str);
     if (str == vecTypeToString(VEC_COVARIANT)) {
         ret = VEC_COVARIANT;
     } else if (str == vecTypeToString(VEC_COVARIANT_NORMALIZE)) {

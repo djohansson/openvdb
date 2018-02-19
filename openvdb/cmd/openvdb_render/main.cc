@@ -41,6 +41,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/split.hpp>
 #include <OpenEXR/ImfChannelList.h>

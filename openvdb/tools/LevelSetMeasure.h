@@ -43,7 +43,6 @@
 #include <openvdb/math/FiniteDifference.h>
 #include <openvdb/math/Operators.h>
 #include <openvdb/util/NullInterrupter.h>
-#include <boost/math/constants/constants.hpp>//for Pi
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_sort.h>
 #include <type_traits>
@@ -113,7 +112,7 @@ template<typename RealT>
 class DiracDelta
 {
 public:
-    DiracDelta(RealT eps) : mC(0.5/eps), mD(2*boost::math::constants::pi<RealT>()*mC), mE(eps) {}
+    DiracDelta(RealT eps) : mC(0.5/eps), mD(2*RealT(3.141592653589793)*mC), mE(eps) {}
     inline RealT operator()(RealT phi) const { return math::Abs(phi) > mE ? 0 : mC*(1+cos(mD*phi)); }
 private:
     const RealT mC, mD, mE;

@@ -606,15 +606,15 @@ bool operator!=(const Mat3<T0> &m0, const Mat3<T1> &m1) { return !(m0 == m1); }
 /// @relates Mat3
 /// @brief Multiply each element of the given matrix by @a scalar and return the result.
 template <typename S, typename T>
-Mat3<typename promote<S, T>::type> operator*(S scalar, const Mat3<T> &m)
+auto operator*(S scalar, const Mat3<T> &m) -> Mat3<decltype(S() * T())>
 { return m*scalar; }
 
 /// @relates Mat3
 /// @brief Multiply each element of the given matrix by @a scalar and return the result.
 template <typename S, typename T>
-Mat3<typename promote<S, T>::type> operator*(const Mat3<T> &m, S scalar)
+auto operator*(const Mat3<T> &m, S scalar) -> Mat3<decltype(S() * T())>
 {
-    Mat3<typename promote<S, T>::type> result(m);
+	Mat3<decltype(S() * T())> result(m);
     result *= scalar;
     return result;
 }
@@ -622,9 +622,9 @@ Mat3<typename promote<S, T>::type> operator*(const Mat3<T> &m, S scalar)
 /// @relates Mat3
 /// @brief Add corresponding elements of @a m0 and @a m1 and return the result.
 template <typename T0, typename T1>
-Mat3<typename promote<T0, T1>::type> operator+(const Mat3<T0> &m0, const Mat3<T1> &m1)
+auto operator+(const Mat3<T0> &m0, const Mat3<T1> &m1) -> Mat3<decltype(T0() + T1())>
 {
-    Mat3<typename promote<T0, T1>::type> result(m0);
+	Mat3<decltype(T0() + T1())> result(m0);
     result += m1;
     return result;
 }
@@ -632,9 +632,9 @@ Mat3<typename promote<T0, T1>::type> operator+(const Mat3<T0> &m0, const Mat3<T1
 /// @relates Mat3
 /// @brief Subtract corresponding elements of @a m0 and @a m1 and return the result.
 template <typename T0, typename T1>
-Mat3<typename promote<T0, T1>::type> operator-(const Mat3<T0> &m0, const Mat3<T1> &m1)
+auto operator-(const Mat3<T0> &m0, const Mat3<T1> &m1) -> Mat3<decltype(T0() - T1())>
 {
-    Mat3<typename promote<T0, T1>::type> result(m0);
+	Mat3<decltype(T0() - T1())> result(m0);
     result -= m1;
     return result;
 }
@@ -642,9 +642,9 @@ Mat3<typename promote<T0, T1>::type> operator-(const Mat3<T0> &m0, const Mat3<T1
 
 /// @brief Multiply @a m0 by @a m1 and return the resulting matrix.
 template <typename T0, typename T1>
-Mat3<typename promote<T0, T1>::type>operator*(const Mat3<T0> &m0, const Mat3<T1> &m1)
+auto operator*(const Mat3<T0> &m0, const Mat3<T1> &m1) -> Mat3<decltype(T0() * T1())>
 {
-    Mat3<typename promote<T0, T1>::type> result(m0);
+	Mat3<decltype(T0() * T1())> result(m0);
     result *= m1;
     return result;
 }
@@ -652,11 +652,10 @@ Mat3<typename promote<T0, T1>::type>operator*(const Mat3<T0> &m0, const Mat3<T1>
 /// @relates Mat3
 /// @brief Multiply @a _m by @a _v and return the resulting vector.
 template<typename T, typename MT>
-inline Vec3<typename promote<T, MT>::type>
-operator*(const Mat3<MT> &_m, const Vec3<T> &_v)
+inline auto operator*(const Mat3<MT> &_m, const Vec3<T> &_v) -> Vec3<decltype(T() * MT())>
 {
     MT const *m = _m.asPointer();
-    return Vec3<typename promote<T, MT>::type>(
+    return Vec3<decltype(T() * MT())>(
         _v[0]*m[0] + _v[1]*m[1] + _v[2]*m[2],
         _v[0]*m[3] + _v[1]*m[4] + _v[2]*m[5],
         _v[0]*m[6] + _v[1]*m[7] + _v[2]*m[8]);
@@ -665,11 +664,10 @@ operator*(const Mat3<MT> &_m, const Vec3<T> &_v)
 /// @relates Mat3
 /// @brief Multiply @a _v by @a _m and return the resulting vector.
 template<typename T, typename MT>
-inline Vec3<typename promote<T, MT>::type>
-operator*(const Vec3<T> &_v, const Mat3<MT> &_m)
+inline auto operator*(const Vec3<T> &_v, const Mat3<MT> &_m) -> Vec3<decltype(T() * MT())>
 {
     MT const *m = _m.asPointer();
-    return Vec3<typename promote<T, MT>::type>(
+    return Vec3<decltype(T() * MT())>(
         _v[0]*m[0] + _v[1]*m[3] + _v[2]*m[6],
         _v[0]*m[1] + _v[1]*m[4] + _v[2]*m[7],
         _v[0]*m[2] + _v[1]*m[5] + _v[2]*m[8]);

@@ -182,7 +182,7 @@ struct BuildPrimarySegment
     typedef typename LeafNodeType::NodeMaskType                                     NodeMaskType;
     typedef typename TreeType::RootNodeType                                         RootNodeType;
     typedef typename RootNodeType::NodeChainType                                    NodeChainType;
-    typedef typename boost::mpl::at<NodeChainType, boost::mpl::int_<1> >::type      InternalNodeType;
+    using InternalNodeType = brigand::at_c<NodeChainType, 1>;
 
     BuildPrimarySegment(const TreeType& lhs, const TreeType& rhs)
         : mSegment(new TreeType(lhs.background()))
@@ -387,7 +387,7 @@ struct BuildSecondarySegment
     typedef typename LeafNodeType::NodeMaskType                                     NodeMaskType;
     typedef typename TreeType::RootNodeType                                         RootNodeType;
     typedef typename RootNodeType::NodeChainType                                    NodeChainType;
-    typedef typename boost::mpl::at<NodeChainType, boost::mpl::int_<1> >::type      InternalNodeType;
+    using InternalNodeType = brigand::at_c<NodeChainType, 1>;
 
     BuildSecondarySegment(const TreeType& lhs, const TreeType& rhs)
         : mSegment(new TreeType(lhs.background()))

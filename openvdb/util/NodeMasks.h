@@ -41,7 +41,6 @@
 #include <iostream>// for cout
 #include <openvdb/Platform.h>
 #include <openvdb/Types.h>
-//#include <boost/mpl/if.hpp>
 //#include <strings.h> // for ffs
 
 
@@ -325,7 +324,7 @@ private:
     //static const Index32 BIT_MASK   = sizeof(void*) == 8 ? 63 : 31;
     //static const Index32 LOG2WORD   = BIT_MASK == 63 ? 6 : 5;
     //static const Index32 WORD_COUNT = SIZE >> LOG2WORD;
-    //using Word = boost::mpl::if_c<BIT_MASK == 63, Index64, Index32>::type;
+    //using Word = std::conditional<BIT_MASK == 63, Index64, Index32>;
 
     Word mWords[WORD_COUNT];//only member data!
 

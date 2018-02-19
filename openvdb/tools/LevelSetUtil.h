@@ -43,8 +43,7 @@
 
 #include <openvdb/Types.h>
 #include <openvdb/Grid.h>
-#include <boost/mpl/at.hpp>
-#include <boost/mpl/int.hpp>
+#include <openvdb/external/brigand.hpp>
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_reduce.h>
@@ -981,7 +980,7 @@ computeEnclosedRegionMask(const TreeType& tree, typename TreeType::ValueType iso
     using LeafNodeType = typename TreeType::LeafNodeType;
     using RootNodeType = typename TreeType::RootNodeType;
     using NodeChainType = typename RootNodeType::NodeChainType;
-    using InternalNodeType = typename boost::mpl::at<NodeChainType, boost::mpl::int_<1>>::type;
+    using InternalNodeType = brigand::at_c<NodeChainType, 1>;
 
     using CharTreeType = typename TreeType::template ValueConverter<char>::Type;
     using CharLeafNodeType = typename CharTreeType::LeafNodeType;
@@ -1100,14 +1099,13 @@ computeInteriorMask(const TreeType& tree, typename TreeType::ValueType iso)
     using LeafNodeType = typename TreeType::LeafNodeType;
     using RootNodeType = typename TreeType::RootNodeType;
     using NodeChainType = typename RootNodeType::NodeChainType;
-    using InternalNodeType = typename boost::mpl::at<NodeChainType, boost::mpl::int_<1> >::type;
+    using InternalNodeType = brigand::at_c<NodeChainType, 1>;
 
     using BoolTreeType = typename TreeType::template ValueConverter<bool>::Type;
     using BoolLeafNodeType = typename BoolTreeType::LeafNodeType;
     using BoolRootNodeType = typename BoolTreeType::RootNodeType;
     using BoolNodeChainType = typename BoolRootNodeType::NodeChainType;
-    using BoolInternalNodeType =
-        typename boost::mpl::at<BoolNodeChainType, boost::mpl::int_<1>>::type;
+    using BoolInternalNodeType = brigand::at_c<BoolNodeChainType, 1>;
 
     /////
 
@@ -1945,7 +1943,7 @@ struct FloodFillSign
     using LeafNodeType = typename TreeType::LeafNodeType;
     using RootNodeType = typename TreeType::RootNodeType;
     using NodeChainType = typename RootNodeType::NodeChainType;
-    using InternalNodeType = typename boost::mpl::at<NodeChainType, boost::mpl::int_<1> >::type;
+    using InternalNodeType = brigand::at_c<NodeChainType, 1>;
 
     FloodFillSign(const TreeType& tree, std::vector<TreeTypePtr>& segments)
         : mTree(&tree)
@@ -2188,7 +2186,7 @@ sdfToFogVolume(GridType& grid, typename GridType::ValueType cutoffDistance)
     using LeafNodeType = typename TreeType::LeafNodeType;
     using RootNodeType = typename TreeType::RootNodeType;
     using NodeChainType = typename RootNodeType::NodeChainType;
-    using InternalNodeType = typename boost::mpl::at<NodeChainType, boost::mpl::int_<1>>::type;
+    using InternalNodeType = brigand::at_c<NodeChainType, 1>;
 
     //////////
 

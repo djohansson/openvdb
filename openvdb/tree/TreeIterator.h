@@ -33,13 +33,9 @@
 #ifndef OPENVDB_TREE_TREEITERATOR_HAS_BEEN_INCLUDED
 #define OPENVDB_TREE_TREEITERATOR_HAS_BEEN_INCLUDED
 
-#include <boost/mpl/front.hpp>
-#include <boost/mpl/pop_front.hpp>
-#include <boost/mpl/push_back.hpp>
-#include <boost/mpl/size.hpp>
-#include <boost/mpl/vector.hpp>
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
+#include <openvdb/external/brigand.hpp>
 #include <openvdb/version.h>
 #include <openvdb/Types.h>
 #include <algorithm>
@@ -80,11 +76,11 @@ namespace iter {
 template<typename HeadT, int HeadLevel>
 struct InvertedTree {
     using SubtreeT = typename InvertedTree<typename HeadT::ChildNodeType, HeadLevel-1>::Type;
-    using Type = typename boost::mpl::push_back<SubtreeT, HeadT>::type;
+    using Type = brigand::push_back<SubtreeT, HeadT>;
 };
 template<typename HeadT>
 struct InvertedTree<HeadT, /*HeadLevel=*/1> {
-    using Type = typename boost::mpl::vector<typename HeadT::ChildNodeType, HeadT>::type;
+    using Type = brigand::list<typename HeadT::ChildNodeType, HeadT>;
 };
 
 } // namespace iter
@@ -265,7 +261,7 @@ public:
     /// The type of iterator stored in the previous list item
     using PrevIterT = typename PrevItemT::IterT;
     /// The type of node (non-const) whose iterator is stored in this list item
-    using _NodeT = typename boost::mpl::front<NodeVecT>::type;
+    using _NodeT = brigand::front<NodeVecT>;
     /// The type of iterator stored in this list item (e.g., InternalNode::ValueOnCIter)
     using IterT = typename IterTraits<typename PrevIterT::NonConstNodeType, PrevIterT>::template
         NodeConverter<_NodeT>::Type;
@@ -413,7 +409,7 @@ public:
     }
 
 private:
-    using RestT = typename boost::mpl::pop_front<NodeVecT>::type; // NodeVecT minus its first item
+    using RestT = brigand::pop_front<NodeVecT>; // NodeVecT minus its first item
     using NextItem = IterListItem<IterListItem, RestT, VecSize - 1, Level + 1>;
 
     IterT mIter;
@@ -430,7 +426,7 @@ public:
     /// The type of iterator stored in the previous list item
     using PrevIterT = typename PrevItemT::IterT;
     /// The type of node (non-const) whose iterator is stored in this list item
-    using _NodeT = typename boost::mpl::front<NodeVecT>::type;
+    using _NodeT = brigand::front<NodeVecT>;
     /// The type of iterator stored in this list item (e.g., InternalNode::ValueOnCIter)
     using IterT = typename IterTraits<typename PrevIterT::NonConstNodeType, PrevIterT>::template
         NodeConverter<_NodeT>::Type;
@@ -540,7 +536,7 @@ public:
     }
 
 private:
-    using RestT = typename boost::mpl::pop_front<NodeVecT>::type; // NodeVecT minus its first item
+    using RestT = brigand::pop_front<NodeVecT>; // NodeVecT minus its first item
     using NextItem = IterListItem<IterListItem, RestT, VecSize - 1, /*Level=*/1>;
 
     IterT mIter;
@@ -554,7 +550,7 @@ template<typename PrevItemT, typename NodeVecT, Index _Level>
 class IterListItem<PrevItemT, NodeVecT, /*VecSize=*/1, _Level>
 {
 public:
-    using _NodeT = typename boost::mpl::front<NodeVecT>::type;
+    using _NodeT = brigand::front<NodeVecT>;
     /// The type of iterator stored in the previous list item
     using PrevIterT = typename PrevItemT::IterT;
     /// The type of iterator stored in this list item (e.g., RootNode::ValueOnCIter)
@@ -1240,7 +1236,7 @@ public:
     using NCRootNodeT = typename RootIterT::NonConstNodeType;
     static const Index ROOT_LEVEL = RootNodeT::LEVEL;
     using InvTreeT = typename iter::InvertedTree<NCRootNodeT, ROOT_LEVEL>::Type;
-    using NCLeafNodeT = typename boost::mpl::front<InvTreeT>::type;
+    using NCLeafNodeT = brigand::front<InvTreeT>;
     using LeafNodeT = typename CopyConstness<RootNodeT, NCLeafNodeT>::Type;
     static const Index LEAF_LEVEL = 0, LEAF_PARENT_LEVEL = LEAF_LEVEL + 1;
 

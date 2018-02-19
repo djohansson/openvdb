@@ -209,6 +209,35 @@ using PointDataIndex64 = PointIndex<Index64, 1>;
 ////////////////////////////////////////
 
 
+template <int NBits>
+struct ShortestFittingInt
+{
+	static_assert(NBits > 0, "Negative or Zero NBits");
+
+	enum { NBytes = ((NBits - 1) / 8) + 1 };
+
+	static_assert(NBytes > 0, "Negative or Zero NBytes");
+	static_assert(NBytes <= sizeof(int64_t), "NBytes > 8");
+
+	using Type = typename std::conditional<
+		(NBytes <= sizeof(int8_t)),
+		int8_t,
+		typename std::conditional<
+			(NBytes <= sizeof(int16_t)),
+			int16_t,
+			typename std::conditional<
+				(NBytes <= sizeof(int32_t)),
+				int32_t,
+				int64_t>::type>::type>::type;
+};
+
+template <int NBits>
+using ShortestFittingIntT = typename ShortestFittingInt<NBits>::Type;
+
+
+////////////////////////////////////////
+
+
 template<typename T> struct VecTraits {
     static const bool IsVec = false;
     static const int Size = 1;

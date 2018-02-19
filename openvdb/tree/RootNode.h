@@ -37,16 +37,12 @@
 
 #include <openvdb/Exceptions.h>
 #include <openvdb/Types.h>
+#include <openvdb/external/brigand.hpp>
 #include <openvdb/io/Compression.h> // for truncateRealToHalf()
 #include <openvdb/math/Math.h> // for isZero(), isExactlyEqual(), etc.
 #include <openvdb/math/BBox.h>
 #include <openvdb/util/NodeMasks.h> // for backward compatibility only (see readTopology())
 #include <openvdb/version.h>
-#include <boost/mpl/contains.hpp>
-#include <boost/mpl/vector.hpp>//for boost::mpl::vector
-#include <boost/mpl/at.hpp>
-#include <boost/mpl/push_back.hpp>
-#include <boost/mpl/size.hpp>
 #include <tbb/parallel_for.h>
 #include <map>
 #include <set>
@@ -79,7 +75,7 @@ public:
 
     /// NodeChainType is a list of this tree's node types, from LeafNodeType to RootNode.
     using NodeChainType = typename NodeChain<RootNode, LEVEL>::Type;
-    static_assert(boost::mpl::size<NodeChainType>::value == LEVEL + 1,
+    static_assert(brigand::size<NodeChainType>::value == LEVEL + 1,
         "wrong number of entries in RootNode node chain");
 
     /// @brief ValueConverter<T>::Type is the type of a RootNode having the same
@@ -990,7 +986,7 @@ private:
 ////////////////////////////////////////
 
 
-/// @brief NodeChain<RootNodeType, RootNodeType::LEVEL>::Type is a boost::mpl::vector
+/// @brief NodeChain<RootNodeType, RootNodeType::LEVEL>::Type is a brigand::list
 /// that lists the types of the nodes of the tree rooted at RootNodeType in reverse order,
 /// from LeafNode to RootNode.
 /// @details For example, if RootNodeType is
@@ -999,7 +995,7 @@ private:
 /// @endcode
 /// then NodeChain::Type is
 /// @code
-/// boost::mpl::vector<
+/// brigand::list<
 ///     LeafNode,
 ///     InternalNode<LeafNode>,
 ///     InternalNode<InternalNode<LeafNode> >,
@@ -1008,18 +1004,18 @@ private:
 ///
 /// @note Use the following to get the Nth node type, where N=0 is the LeafNodeType:
 /// @code
-/// boost::mpl::at<NodeChainType, boost::mpl::int_<N> >::type
+/// brigand::at_c<NodeChainType, N>
 /// @endcode
 template<typename HeadT, int HeadLevel>
 struct NodeChain {
     using SubtreeT = typename NodeChain<typename HeadT::ChildNodeType, HeadLevel-1>::Type;
-    using Type = typename boost::mpl::push_back<SubtreeT, HeadT>::type;
+    using Type = brigand::push_back<SubtreeT, HeadT>;
 };
 
 /// Specialization to terminate NodeChain
 template<typename HeadT>
 struct NodeChain<HeadT, /*HeadLevel=*/1> {
-    using Type = typename boost::mpl::vector<typename HeadT::ChildNodeType, HeadT>::type;
+    using Type = brigand::list<typename HeadT::ChildNodeType, HeadT>;
 };
 
 
@@ -2855,8 +2851,8 @@ RootNode<ChildT>::getNodes(ArrayT& array)
         "argument to getNodes() must be a pointer array");
     using NodeType = typename std::remove_pointer<NodePtr>::type;
     using NonConstNodeType = typename std::remove_const<NodeType>::type;
-    using result = typename boost::mpl::contains<NodeChainType, NonConstNodeType>::type;
-    static_assert(result::value, "can't extract non-const nodes from a const tree");
+    //using result = brigand::contains<NodeChainType, NonConstNodeType>;
+    //static_assert(result::value, "can't extract non-const nodes from a const tree");
     using ArrayChildT = typename std::conditional<
         std::is_const<NodeType>::value, const ChildT, ChildT>::type;
 
@@ -2885,8 +2881,8 @@ RootNode<ChildT>::getNodes(ArrayT& array) const
     static_assert(std::is_const<NodeType>::value,
         "argument to getNodes() must be an array of const node pointers");
     using NonConstNodeType = typename std::remove_const<NodeType>::type;
-    using result = typename boost::mpl::contains<NodeChainType, NonConstNodeType>::type;
-    static_assert(result::value, "can't extract non-const nodes from a const tree");
+    //using result = brigand::contains<NodeChainType, NonConstNodeType>;
+    //static_assert(result::value, "can't extract non-const nodes from a const tree");
 
     for (MapCIter iter=mTable.begin(); iter!=mTable.end(); ++iter) {
         if (const ChildNodeType *child = iter->second.child) {
@@ -2913,8 +2909,8 @@ RootNode<ChildT>::stealNodes(ArrayT& array, const ValueType& value, bool state)
         "argument to stealNodes() must be a pointer array");
     using NodeType = typename std::remove_pointer<NodePtr>::type;
     using NonConstNodeType = typename std::remove_const<NodeType>::type;
-    using result = typename boost::mpl::contains<NodeChainType, NonConstNodeType>::type;
-    static_assert(result::value, "can't extract non-const nodes from a const tree");
+    //using result = brigand::contains<NodeChainType, NonConstNodeType>;
+    //static_assert(result::value, "can't extract non-const nodes from a const tree");
     using ArrayChildT = typename std::conditional<
         std::is_const<NodeType>::value, const ChildT, ChildT>::type;
 

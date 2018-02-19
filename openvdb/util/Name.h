@@ -36,6 +36,10 @@
 #include <string>
 #include <iostream>
 #include <vector>
+#include <algorithm> 
+#include <cctype>
+#include <locale>
+
 
 namespace openvdb {
 OPENVDB_USE_VERSION_NAMESPACE
@@ -60,6 +64,33 @@ writeString(std::ostream& os, const Name& name)
     uint32_t size = uint32_t(name.size());
     os.write(reinterpret_cast<char*>(&size), sizeof(uint32_t));
     os.write(&name[0], size);
+}
+
+inline void ltrim(std::string& s)
+{
+	s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](int ch)
+	{
+		return !std::isspace(ch);
+	}));
+}
+
+inline void rtrim(std::string& s)
+{
+	s.erase(std::find_if(s.rbegin(), s.rend(), [](int ch)
+	{
+		return !std::isspace(ch);
+	}).base(), s.end());
+}
+
+inline void trim(std::string& s)
+{
+	ltrim(s);
+	rtrim(s);
+}
+
+inline void to_lower(std::string& s)
+{
+	std::transform(s.begin(), s.end(), s.begin(), ::tolower);
 }
 
 } // namespace OPENVDB_VERSION_NAME

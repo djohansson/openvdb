@@ -519,10 +519,9 @@ Abs(const Coord& xyz)
 //@{
 /// Allow a Coord to be added to or subtracted from a Vec3.
 template<typename T>
-inline Vec3<typename promote<T, typename Coord::ValueType>::type>
-operator+(const Vec3<T>& v0, const Coord& v1)
+inline auto operator+(const Vec3<T>& v0, const Coord& v1) -> Vec3<decltype(T() + Coord::ValueType())>
 {
-    Vec3<typename promote<T, typename Coord::ValueType>::type> result(v0);
+	Vec3<decltype(T() + Coord::ValueType())> result(v0);
     result[0] += v1[0];
     result[1] += v1[1];
     result[2] += v1[2];
@@ -530,10 +529,9 @@ operator+(const Vec3<T>& v0, const Coord& v1)
 }
 
 template<typename T>
-inline Vec3<typename promote<T, typename Coord::ValueType>::type>
-operator+(const Coord& v1, const Vec3<T>& v0)
+inline auto operator+(const Coord& v1, const Vec3<T>& v0) -> Vec3<decltype(T() + Coord::ValueType())>
 {
-    Vec3<typename promote<T, typename Coord::ValueType>::type> result(v0);
+	Vec3<decltype(T() + Coord::ValueType())> result(v0);
     result[0] += v1[0];
     result[1] += v1[1];
     result[2] += v1[2];
@@ -545,10 +543,9 @@ operator+(const Coord& v1, const Vec3<T>& v0)
 //@{
 /// Allow a Coord to be subtracted from a Vec3.
 template <typename T>
-inline Vec3<typename promote<T, Coord::ValueType>::type>
-operator-(const Vec3<T>& v0, const Coord& v1)
+inline auto operator-(const Vec3<T>& v0, const Coord& v1) -> Vec3<decltype(T() - Coord::ValueType())>
 {
-    Vec3<typename promote<T, Coord::ValueType>::type> result(v0);
+	Vec3<decltype(T() - Coord::ValueType())> result(v0);
     result[0] -= v1[0];
     result[1] -= v1[1];
     result[2] -= v1[2];
@@ -556,10 +553,9 @@ operator-(const Vec3<T>& v0, const Coord& v1)
 }
 
 template <typename T>
-inline Vec3<typename promote<T, Coord::ValueType>::type>
-operator-(const Coord& v1, const Vec3<T>& v0)
+inline auto operator-(const Coord& v1, const Vec3<T>& v0) -> Vec3<decltype(T() - Coord::ValueType())>
 {
-    Vec3<typename promote<T, Coord::ValueType>::type> result(v0);
+	Vec3<decltype(T() - Coord::ValueType())> result(v0);
     result[0] -= v1[0];
     result[1] -= v1[1];
     result[2] -= v1[2];

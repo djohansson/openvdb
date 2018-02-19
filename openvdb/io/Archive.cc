@@ -50,6 +50,7 @@
 #include <boost/interprocess/mapped_region.hpp>
 #include <boost/iostreams/device/array.hpp>
 #include <boost/iostreams/stream.hpp>
+#include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
@@ -324,10 +325,10 @@ namespace {
 
 template<typename T>
 inline bool
-writeAsType(std::ostream& os, const boost::any& val)
+writeAsType(std::ostream& os, const linb::any& val)
 {
     if (val.type() == typeid(T)) {
-        os << boost::any_cast<T>(val);
+        os << linb::any_cast<T>(val);
         return true;
     }
     return false;
@@ -342,8 +343,8 @@ operator<<(std::ostream& os, const StreamMetadata::AuxDataMap& auxData)
         it != end; ++it)
     {
         os << it->first << ": ";
-        // Note: boost::any doesn't support serialization.
-        const boost::any& val = it->second;
+        // Note: linb::any doesn't support serialization.
+        const linb::any& val = it->second;
         if (!writeAsType<int32_t>(os, val)
             && !writeAsType<int64_t>(os, val)
             && !writeAsType<int16_t>(os, val)
@@ -531,12 +532,13 @@ getErrorString()
 Archive::Archive()
     : mFileVersion(OPENVDB_FILE_VERSION)
     , mLibraryVersion(OPENVDB_LIBRARY_MAJOR_VERSION, OPENVDB_LIBRARY_MINOR_VERSION)
-    , mUuid(boost::uuids::nil_uuid())
     , mInputHasGridOffsets(false)
     , mEnableInstancing(true)
     , mCompression(DEFAULT_COMPRESSION_FLAGS)
     , mEnableGridStats(true)
 {
+	static_assert(sizeof(boost::uuids::uuid) == sizeof(mUuid), "Make sure that mUuid has the same size as boost::uuids::uuid");
+	*reinterpret_cast<boost::uuids::uuid*>(mUuid) = boost::uuids::nil_uuid();
 }
 
 
@@ -558,7 +560,7 @@ Archive::copy() const
 std::string
 Archive::getUniqueTag() const
 {
-    return boost::uuids::to_string(mUuid);
+    return boost::uuids::to_string(*reinterpret_cast<boost::uuids::uuid*>(mUuid));
 }
 
 
@@ -922,26 +924,24 @@ Archive::readHeader(std::istream& is)
     }
 
     // 6) Read the 16-byte (128-bit) uuid.
-    boost::uuids::uuid oldUuid = mUuid;
+	boost::uuids::uuid& myUuid = *reinterpret_cast<boost::uuids::uuid*>(mUuid);
+    boost::uuids::uuid oldUuid = myUuid;
     if (mFileVersion >= OPENVDB_FILE_VERSION_BOOST_UUID) {
         // UUID is stored as an ASCII string.
-        is >> mUuid;
+        is >> myUuid;
     } else {
         // Older versions stored the UUID as a byte string.
-        char uuidBytes[16];
+		char uuidBytes[16];
         is.read(uuidBytes, 16);
-        std::memcpy(&mUuid.data[0], uuidBytes, std::min<size_t>(16, mUuid.size()));
+		std::memcpy(&myUuid.data[0], uuidBytes, std::min<size_t>(16, myUuid.size()));
     }
-    return oldUuid != mUuid; // true if UUID in input stream differs from old UUID
+    return oldUuid != myUuid; // true if UUID in input stream differs from old UUID
 }
 
 
 void
 Archive::writeHeader(std::ostream& os, bool seekable) const
 {
-    using boost::uint32_t;
-    using boost::int64_t;
-
     // 1) Write the magic number for VDB.
     int64_t magic = OPENVDB_MAGIC;
     os.write(reinterpret_cast<char*>(&magic), sizeof(int64_t));
@@ -967,8 +967,9 @@ Archive::writeHeader(std::ostream& os, bool seekable) const
     std::mt19937 ran;
     ran.seed(std::mt19937::result_type(std::random_device()() + std::time(nullptr)));
     boost::uuids::basic_random_generator<std::mt19937> gen(&ran);
-    mUuid = gen(); // mUuid is mutable
-    os << mUuid;
+	boost::uuids::uuid& myUuid = *reinterpret_cast<boost::uuids::uuid*>(mUuid);
+	myUuid = gen(); // mUuid is mutable
+    os << myUuid;
 }
 
 

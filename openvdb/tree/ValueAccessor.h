@@ -58,21 +58,11 @@
 #ifndef OPENVDB_TREE_VALUEACCESSOR_HAS_BEEN_INCLUDED
 #define OPENVDB_TREE_VALUEACCESSOR_HAS_BEEN_INCLUDED
 
-#include <boost/mpl/front.hpp>
-#include <boost/mpl/pop_front.hpp>
-#include <boost/mpl/push_back.hpp>
-#include <boost/mpl/size.hpp>
-#include <boost/mpl/at.hpp>
-#include <boost/mpl/equal_to.hpp>
-#include <boost/mpl/comparison.hpp>
-#include <boost/mpl/vector.hpp>
-#include <boost/mpl/assert.hpp>
-#include <boost/mpl/erase.hpp>
-#include <boost/mpl/find.hpp>
 #include <tbb/null_mutex.h>
 #include <tbb/spin_mutex.h>
 #include <openvdb/version.h>
 #include <openvdb/Types.h>
+#include <openvdb/external/brigand.hpp>
 #include <cassert>
 #include <limits>
 #include <type_traits>
@@ -470,11 +460,10 @@ private:
     // Define a list of all tree node types from LeafNode to RootNode
     using InvTreeT = typename RootNodeT::NodeChainType;
     // Remove all tree node types that are excluded from the cache
-    using BeginT = typename boost::mpl::begin<InvTreeT>::type;
-    using FirstT = typename boost::mpl::advance<BeginT, boost::mpl::int_<CacheLevels>>::type;
-    using LastT = typename boost::mpl::find<InvTreeT, RootNodeT>::type;
-    using SubtreeT = typename boost::mpl::erase<InvTreeT, FirstT, LastT>::type;
-    using CacheItemT = CacheItem<ValueAccessor, SubtreeT, boost::mpl::size<SubtreeT>::value==1>;
+	using InvTreeSplitT0 = brigand::split_at<InvTreeT, std::integral_constant<int, CacheLevels>>;
+	using InvTreeSplitT1 = brigand::split_at<InvTreeT, std::integral_constant<int, brigand::index_of<InvTreeT, RootNodeT>::value>>;
+	using SubtreeT = brigand::append<brigand::front<InvTreeSplitT0>, brigand::back<InvTreeSplitT1>>;
+    using CacheItemT = CacheItem<ValueAccessor, SubtreeT, brigand::size<SubtreeT>::value==1>;
 
     // Private member data
     mutable CacheItemT mCache;
@@ -567,7 +556,7 @@ template<typename TreeCacheT, typename NodeVecT, bool AtRoot>
 class CacheItem
 {
 public:
-    using NodeType = typename boost::mpl::front<NodeVecT>::type;
+    using NodeType = brigand::front<NodeVecT>;
     using ValueType = typename NodeType::ValueType;
     using LeafNodeType = typename NodeType::LeafNodeType;
     using CoordLimits = std::numeric_limits<Int32>;
@@ -862,8 +851,8 @@ private:
     TreeCacheT* mParent;
     Coord mHash;
     const NodeType* mNode;
-    using RestT = typename boost::mpl::pop_front<NodeVecT>::type; // NodeVecT minus its first item
-    CacheItem<TreeCacheT, RestT, /*AtRoot=*/boost::mpl::size<RestT>::value == 1> mNext;
+    using RestT = brigand::pop_front<NodeVecT>; // NodeVecT minus its first item
+    CacheItem<TreeCacheT, RestT, /*AtRoot=*/brigand::size<RestT>::value == 1> mNext;
 };// end of CacheItem
 
 
@@ -872,7 +861,7 @@ template<typename TreeCacheT, typename NodeVecT>
 class CacheItem<TreeCacheT, NodeVecT, /*AtRoot=*/true>
 {
 public:
-    using RootNodeType = typename boost::mpl::front<NodeVecT>::type;
+    using RootNodeType = brigand::front<NodeVecT>;
     using ValueType = typename RootNodeType::ValueType;
     using LeafNodeType = typename RootNodeType::LeafNodeType;
 
@@ -1269,7 +1258,7 @@ public:
     using LeafNodeT = typename TreeType::LeafNodeType;
     using BaseT = ValueAccessorBase<TreeType, IsSafe>;
     using InvTreeT = typename RootNodeT::NodeChainType;
-    using NodeT0 = typename boost::mpl::at<InvTreeT, boost::mpl::int_<L0> >::type;
+    using NodeT0 = brigand::at_c<InvTreeT, L0>;
 
     /// Constructor from a tree
     ValueAccessor1(TreeType& tree) : BaseT(tree), mKey0(Coord::max()), mNode0(nullptr)
@@ -1645,8 +1634,8 @@ public:
     using LeafNodeT = typename TreeType::LeafNodeType;
     using BaseT = ValueAccessorBase<TreeType, IsSafe>;
     using InvTreeT = typename RootNodeT::NodeChainType;
-    using NodeT0 = typename boost::mpl::at<InvTreeT, boost::mpl::int_<L0>>::type;
-    using NodeT1 = typename boost::mpl::at<InvTreeT, boost::mpl::int_<L1>>::type;
+    using NodeT0 = brigand::at_c<InvTreeT, L0>;
+    using NodeT1 = brigand::at_c<InvTreeT, L1>;
 
     /// Constructor from a tree
     ValueAccessor2(TreeType& tree) : BaseT(tree),
@@ -2135,9 +2124,9 @@ public:
     using LeafNodeT = typename TreeType::LeafNodeType;
     using BaseT = ValueAccessorBase<TreeType, IsSafe>;
     using InvTreeT = typename RootNodeT::NodeChainType;
-    using NodeT0 = typename boost::mpl::at<InvTreeT, boost::mpl::int_<L0> >::type;
-    using NodeT1 = typename boost::mpl::at<InvTreeT, boost::mpl::int_<L1> >::type;
-    using NodeT2 = typename boost::mpl::at<InvTreeT, boost::mpl::int_<L2> >::type;
+    using NodeT0 = brigand::at_c<InvTreeT, L0>;
+    using NodeT1 = brigand::at_c<InvTreeT, L1>;
+    using NodeT2 = brigand::at_c<InvTreeT, L2>;
 
     /// Constructor from a tree
     ValueAccessor3(TreeType& tree) : BaseT(tree),

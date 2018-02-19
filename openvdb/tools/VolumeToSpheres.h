@@ -35,15 +35,13 @@
 #ifndef OPENVDB_TOOLS_VOLUME_TO_SPHERES_HAS_BEEN_INCLUDED
 #define OPENVDB_TOOLS_VOLUME_TO_SPHERES_HAS_BEEN_INCLUDED
 
+#include <openvdb/external/brigand.hpp>
 #include <openvdb/tree/LeafManager.h>
 #include "Morphology.h" // for erodeVoxels()
 #include "PointScatter.h"
 #include "LevelSetUtil.h"
 #include "VolumeToMesh.h"
 
-#include <boost/mpl/at.hpp>
-#include <boost/mpl/int.hpp>
-#include <boost/scoped_array.hpp>
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_reduce.h>
@@ -841,7 +839,7 @@ ClosestSurfacePoint<GridT>::initialize(
 
         const tbb::blocked_range<size_t> auxiliaryLeafNodeRange(0, signFlagsLeafNodes.size());
 
-        boost::scoped_array<Index32> leafNodeOffsets(new Index32[signFlagsLeafNodes.size()]);
+        std::unique_ptr<Index32[]> leafNodeOffsets(new Index32[signFlagsLeafNodes.size()]);
 
         tbb::parallel_for(auxiliaryLeafNodeRange,
             volume_to_mesh_internal::LeafNodePointCount<Int16LeafNodeType::LOG2DIM>
@@ -874,10 +872,9 @@ ClosestSurfacePoint<GridT>::initialize(
 
     using Index32RootNodeT = typename Index32TreeT::RootNodeType;
     using Index32NodeChainT = typename Index32RootNodeT::NodeChainType;
-    static_assert(boost::mpl::size<Index32NodeChainT>::value > 1,
+    static_assert(brigand::size<Index32NodeChainT>::value > 1,
         "expected tree depth greater than one");
-    using Index32InternalNodeT =
-        typename boost::mpl::at<Index32NodeChainT, boost::mpl::int_<1> >::type;
+    using Index32InternalNodeT = brigand::at_c<Index32NodeChainT, 1>;
 
     typename Index32TreeT::NodeCIter nIt = mIdxTreePt->cbeginNode();
     nIt.setMinDepth(Index32TreeT::NodeCIter::LEAF_DEPTH - 1);
