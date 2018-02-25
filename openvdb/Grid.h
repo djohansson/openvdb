@@ -207,7 +207,7 @@ public:
     /// @details With @a tolerance > 0, sparsify regions where voxels have the same
     /// active state and have values that differ by no more than the tolerance
     /// (converted to this grid's value type).
-    virtual void pruneGrid() = 0;
+    virtual void pruneGrid(float tolerance = 0.0) = 0;
 
 #if OPENVDB_ABI_VERSION_NUMBER >= 3
     /// @brief Clip this grid to the given world-space bounding box.
@@ -702,7 +702,7 @@ public:
     void denseFill(const CoordBBox& bbox, const ValueType& value, bool active = true);
 
     /// Reduce the memory footprint of this grid by increasing its sparseness.
-    void pruneGrid() override;
+    void pruneGrid(float tolerance = 0.0) override;
 
 #if OPENVDB_ABI_VERSION_NUMBER >= 3
     /// @brief Clip this grid to the given index-space bounding box.
@@ -1352,9 +1352,9 @@ Grid<TreeT>::denseFill(const CoordBBox& bbox, const ValueType& value, bool activ
 
 template<typename TreeT>
 inline void
-Grid<TreeT>::pruneGrid()
+Grid<TreeT>::pruneGrid(float tolerance)
 {
-    this->tree().prune();
+    this->tree().prune(ValueType(zeroVal<ValueType>() + tolerance));
 }
 
 #if OPENVDB_ABI_VERSION_NUMBER >= 3

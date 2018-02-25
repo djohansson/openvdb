@@ -230,7 +230,7 @@ public:
     Tree& operator=(const Tree&) = delete; // disallow assignment
 
     /// Deep copy constructor
-    Tree(const Tree& other): TreeBase(other), mRoot(other.mRoot), mTolerance(other.mTolerance)
+    Tree(const Tree& other): TreeBase(other), mRoot(other.mRoot)
     {
     }
 
@@ -308,8 +308,6 @@ public:
     const RootNodeType& root() const { return mRoot; }
     //@}
 
-	ValueType& tolerance() { return mTolerance; }
-	const ValueType& tolerance() const { return mTolerance; }
 
     //
     // Tree methods
@@ -532,10 +530,10 @@ public:
     /// any nodes whose values are all the same (optionally to within a tolerance)
     /// and have the same active state.
     /// @warning Will soon be deprecated!
-    void prune()
+    void prune(const ValueType& tolerance = zeroVal<ValueType>())
     {
         this->clearAllAccessors();
-        mRoot.prune(mTolerance);
+        mRoot.prune(tolerance);
     }
 
     /// @brief Add the given leaf node to this tree, creating a new branch if necessary.
@@ -1244,8 +1242,6 @@ protected:
     RootNodeType mRoot; // root node of the tree
     mutable AccessorRegistry mAccessorRegistry;
     mutable ConstAccessorRegistry mConstAccessorRegistry;
-
-	ValueType mTolerance;
 
     static tbb::atomic<const Name*> sTreeTypeName;
 }; // end of Tree class
