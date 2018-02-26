@@ -45,11 +45,17 @@
 #include "LeafNode.h"
 #include "TreeIterator.h"
 #include "ValueAccessor.h"
-#include <tbb/atomic.h>
+
+#ifdef OPENVDB_USE_TBB
 #include <tbb/concurrent_hash_map.h>
+#endif
+
+#include <atomic>
 #include <cstdint>
 #include <iostream>
+#include <mutex>
 #include <sstream>
+#include <unordered_map>
 #include <vector>
 
 
@@ -1216,8 +1222,15 @@ public:
 
 
 protected:
+#ifdef OPENVDB_USE_TBB
     using AccessorRegistry = tbb::concurrent_hash_map<ValueAccessorBase<Tree, true>*, bool>;
     using ConstAccessorRegistry = tbb::concurrent_hash_map<ValueAccessorBase<const Tree, true>*, bool>;
+#else
+	using AccessorRegistry = std::unordered_map<ValueAccessorBase<Tree, true>*, bool>;
+	using AccessorRegistryMutex = std::mutex;
+	using ConstAccessorRegistry = std::unordered_map<ValueAccessorBase<const Tree, true>*, bool>;
+	using ConstAccessorRegistryMutex = std::mutex;
+#endif
 
     /// @brief Notify all registered accessors, by calling ValueAccessor::release(),
     /// that this tree is about to be deleted.
@@ -1228,8 +1241,8 @@ protected:
     struct DeallocateNodes {
         DeallocateNodes(std::vector<NodeType*>& nodes)
             : mNodes(nodes.empty() ? nullptr : &nodes.front()) { }
-        void operator()(const tbb::blocked_range<size_t>& range) const {
-            for (size_t n = range.begin(), N = range.end(); n < N; ++n) {
+        void operator()(const std::pair<size_t, size_t>& range) const {
+            for (size_t n = range.first, N = range.second; n < N; ++n) {
                 delete mNodes[n]; mNodes[n] = nullptr;
             }
         }
@@ -1242,12 +1255,16 @@ protected:
     RootNodeType mRoot; // root node of the tree
     mutable AccessorRegistry mAccessorRegistry;
     mutable ConstAccessorRegistry mConstAccessorRegistry;
+#ifndef OPENVDB_USE_TBB
+	mutable AccessorRegistryMutex mAccessorRegistryMutex;
+	mutable ConstAccessorRegistryMutex mConstAccessorRegistryMutex;
+#endif
 
-    static tbb::atomic<const Name*> sTreeTypeName;
+    static std::atomic<const Name*> sTreeTypeName;
 }; // end of Tree class
 
 template<typename _RootNodeType>
-tbb::atomic<const Name*> Tree<_RootNodeType>::sTreeTypeName;
+std::atomic<const Name*> Tree<_RootNodeType>::sTreeTypeName;
 
 
 /// @brief Tree3<T, N1, N2>::Type is the type of a three-level tree
@@ -1490,14 +1507,24 @@ Tree<RootNodeType>::clear()
     std::vector<LeafNodeType*> leafnodes;
     this->stealNodes(leafnodes);
 
-    tbb::parallel_for(tbb::blocked_range<size_t>(0, leafnodes.size()),
+#ifdef OPENVDB_USE_TBB
+    tbb::parallel_for(std::pair<size_t, size_t>(0, leafnodes.size()),
         DeallocateNodes<LeafNodeType>(leafnodes));
+#else
+	(DeallocateNodes<LeafNodeType>(leafnodes))(
+		std::pair<size_t, size_t>(0, leafnodes.size()));
+#endif
 
     std::vector<typename RootNodeType::ChildNodeType*> internalNodes;
     this->stealNodes(internalNodes);
 
-    tbb::parallel_for(tbb::blocked_range<size_t>(0, internalNodes.size()),
+#ifdef OPENVDB_USE_TBB
+    tbb::parallel_for(std::pair<size_t, size_t>(0, internalNodes.size()),
         DeallocateNodes<typename RootNodeType::ChildNodeType>(internalNodes));
+#else
+	(DeallocateNodes<typename RootNodeType::ChildNodeType>(internalNodes))(
+		std::pair<size_t, size_t>(0, internalNodes.size()));
+#endif
 
     mRoot.clear();
 
@@ -1513,6 +1540,9 @@ inline void
 Tree<RootNodeType>::attachAccessor(ValueAccessorBase<Tree, true>& accessor) const
 {
     typename AccessorRegistry::accessor a;
+#ifndef OPENVDB_USE_TBB
+	std::lock_guard<AccessorRegistryMutex> lock(mAccessorRegistryMutex);
+#endif
     mAccessorRegistry.insert(a, &accessor);
 }
 
@@ -1522,6 +1552,9 @@ inline void
 Tree<RootNodeType>::attachAccessor(ValueAccessorBase<const Tree, true>& accessor) const
 {
     typename ConstAccessorRegistry::accessor a;
+#ifndef OPENVDB_USE_TBB
+	std::lock_guard<ConstAccessorRegistryMutex> lock(mConstAccessorRegistryMutex);
+#endif
     mConstAccessorRegistry.insert(a, &accessor);
 }
 
@@ -1530,6 +1563,9 @@ template<typename RootNodeType>
 inline void
 Tree<RootNodeType>::releaseAccessor(ValueAccessorBase<Tree, true>& accessor) const
 {
+#ifndef OPENVDB_USE_TBB
+	std::lock_guard<AccessorRegistryMutex> lock(mAccessorRegistryMutex);
+#endif
     mAccessorRegistry.erase(&accessor);
 }
 
@@ -1538,6 +1574,9 @@ template<typename RootNodeType>
 inline void
 Tree<RootNodeType>::releaseAccessor(ValueAccessorBase<const Tree, true>& accessor) const
 {
+#ifndef OPENVDB_USE_TBB
+	std::lock_guard<ConstAccessorRegistryMutex> lock(mConstAccessorRegistryMutex);
+#endif
     mConstAccessorRegistry.erase(&accessor);
 }
 
@@ -1546,17 +1585,27 @@ template<typename RootNodeType>
 inline void
 Tree<RootNodeType>::clearAllAccessors()
 {
-    for (typename AccessorRegistry::iterator it = mAccessorRegistry.begin();
-        it != mAccessorRegistry.end(); ++it)
-    {
-        if (it->first) it->first->clear();
-    }
+	{
+#ifndef OPENVDB_USE_TBB
+		std::lock_guard<AccessorRegistryMutex> lock(mAccessorRegistryMutex);
+#endif
+		for (typename AccessorRegistry::iterator it = mAccessorRegistry.begin();
+			it != mAccessorRegistry.end(); ++it)
+		{
+			if (it->first) it->first->clear();
+		}
+	}
 
-    for (typename ConstAccessorRegistry::iterator it = mConstAccessorRegistry.begin();
-        it != mConstAccessorRegistry.end(); ++it)
-    {
-        if (it->first) it->first->clear();
-    }
+	{
+#ifndef OPENVDB_USE_TBB
+		std::lock_guard<ConstAccessorRegistryMutex> lock(mConstAccessorRegistryMutex);
+#endif
+		for (typename ConstAccessorRegistry::iterator it = mConstAccessorRegistry.begin();
+			it != mConstAccessorRegistry.end(); ++it)
+		{
+			if (it->first) it->first->clear();
+		}
+	}
 }
 
 
@@ -1564,21 +1613,31 @@ template<typename RootNodeType>
 inline void
 Tree<RootNodeType>::releaseAllAccessors()
 {
-    mAccessorRegistry.erase(nullptr);
-    for (typename AccessorRegistry::iterator it = mAccessorRegistry.begin();
-        it != mAccessorRegistry.end(); ++it)
-    {
-        it->first->release();
-    }
-    mAccessorRegistry.clear();
+	{
+#ifndef OPENVDB_USE_TBB
+		std::lock_guard<AccessorRegistryMutex> lock(mAccessorRegistryMutex);
+#endif
+		mAccessorRegistry.erase(nullptr);
+		for (typename AccessorRegistry::iterator it = mAccessorRegistry.begin();
+			it != mAccessorRegistry.end(); ++it)
+		{
+			it->first->release();
+		}
+		mAccessorRegistry.clear();
+	}
 
-    mAccessorRegistry.erase(nullptr);
-    for (typename ConstAccessorRegistry::iterator it = mConstAccessorRegistry.begin();
-        it != mConstAccessorRegistry.end(); ++it)
-    {
-        it->first->release();
-    }
-    mConstAccessorRegistry.clear();
+	{
+#ifndef OPENVDB_USE_TBB
+		std::lock_guard<ConstAccessorRegistryMutex> lock(mConstAccessorRegistryMutex);
+#endif
+		mConstAccessorRegistry.erase(nullptr);
+		for (typename ConstAccessorRegistry::iterator it = mConstAccessorRegistry.begin();
+			it != mConstAccessorRegistry.end(); ++it)
+		{
+			it->first->release();
+		}
+		mConstAccessorRegistry.clear();
+	}
 }
 
 
@@ -2121,7 +2180,7 @@ template<typename RootNodeType>
 inline const Name&
 Tree<RootNodeType>::treeType()
 {
-    if (sTreeTypeName == nullptr) {
+    if (sTreeTypeName.load() == nullptr) {
         std::vector<Index> dims;
         Tree::getNodeLog2Dims(dims);
         std::ostringstream ostr;
@@ -2129,8 +2188,9 @@ Tree<RootNodeType>::treeType()
         for (size_t i = 1, N = dims.size(); i < N; ++i) { // start from 1 to skip the RootNode
             ostr << "_" << dims[i];
         }
-        Name* s = new Name(ostr.str());
-        if (sTreeTypeName.compare_and_swap(s, nullptr) != nullptr) delete s;
+		const Name* nada = nullptr;
+        const Name* s = new Name(ostr.str());
+        if (!sTreeTypeName.compare_exchange_strong(nada, s)) delete s;
     }
     return *sTreeTypeName;
 }

@@ -43,7 +43,9 @@
 #include "PointDataGrid.h"
 #include "IndexFilter.h"
 
+#ifdef OPENVDB_USE_TBB
 #include <tbb/combinable.h>
+#endif
 
 #include <type_traits>
 #include <vector>

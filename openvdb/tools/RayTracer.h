@@ -160,7 +160,7 @@ public:
 
     /// @brief Public method required by tbb::parallel_for.
     /// @warning Never call it directly.
-    void operator()(const tbb::blocked_range<size_t>& range) const;
+    void operator()(const std::pair<size_t, size_t>& range) const;
 
 private:
     const bool                          mIsMaster;
@@ -241,7 +241,7 @@ public:
 
     /// @brief Public method required by tbb::parallel_for.
     /// @warning Never call it directly.
-    void operator()(const tbb::blocked_range<size_t>& range) const;
+    void operator()(const std::pair<size_t, size_t>& range) const;
 
 private:
 
@@ -937,13 +937,13 @@ template<typename GridT, typename IntersectorT>
 inline void LevelSetRayTracer<GridT, IntersectorT>::
 render(bool threaded) const
 {
-    tbb::blocked_range<size_t> range(0, mCamera->height());
+    std::pair<size_t, size_t> range(0, mCamera->height());
     threaded ? tbb::parallel_for(range, *this) : (*this)(range);
 }
 
 template<typename GridT, typename IntersectorT>
 inline void LevelSetRayTracer<GridT, IntersectorT>::
-operator()(const tbb::blocked_range<size_t>& range) const
+operator()(const std::pair<size_t, size_t>& range) const
 {
     const BaseShader& shader = *mShader;
     Vec3Type xyz, nml;
@@ -1029,13 +1029,13 @@ template<typename IntersectorT, typename SampleT>
 inline void VolumeRender<IntersectorT, SampleT>::
 render(bool threaded) const
 {
-    tbb::blocked_range<size_t> range(0, mCamera->height());
+    std::pair<size_t, size_t> range(0, mCamera->height());
     threaded ? tbb::parallel_for(range, *this) : (*this)(range);
 }
 
 template<typename IntersectorT, typename SampleT>
 inline void VolumeRender<IntersectorT, SampleT>::
-operator()(const tbb::blocked_range<size_t>& range) const
+operator()(const std::pair<size_t, size_t>& range) const
 {
     SamplerType sampler(mAccessor, mShadow->grid().transform());//light-weight wrapper
 

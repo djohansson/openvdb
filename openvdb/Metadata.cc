@@ -30,7 +30,7 @@
 
 #include "Metadata.h"
 
-#include <tbb/mutex.h>
+#include <mutex>
 #include <algorithm> // for std::min()
 #include <map>
 #include <sstream>
@@ -41,8 +41,8 @@ namespace openvdb {
 OPENVDB_USE_VERSION_NAMESPACE
 namespace OPENVDB_VERSION_NAME {
 
-using Mutex = tbb::mutex;
-using Lock = Mutex::scoped_lock;
+using Mutex = std::mutex;
+using Lock = std::lock_guard<Mutex>;
 
 using createMetadata = Metadata::Ptr (*)();
 using MetadataFactoryMap = std::map<Name, createMetadata>;

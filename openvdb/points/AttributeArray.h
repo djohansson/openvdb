@@ -47,9 +47,8 @@
 #include "IndexIterator.h"
 #include "StreamCompression.h"
 
-#include <tbb/spin_mutex.h>
-#include <tbb/atomic.h>
-
+#include <mutex>
+#include <atomic>
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -147,7 +146,7 @@ public:
     template <typename ValueType, typename CodecType> friend class AttributeHandle;
 
     AttributeArray() = default;
-    AttributeArray(const AttributeArray&) = default;
+    AttributeArray(const AttributeArray& rhs);
     AttributeArray& operator=(const AttributeArray&) = default;
     virtual ~AttributeArray() = default;
 
@@ -298,7 +297,7 @@ protected:
     uint8_t mSerializationFlags = 0;
 
 #if OPENVDB_ABI_VERSION_NUMBER >= 5
-    tbb::atomic<Index32> mOutOfCore = 0; // interpreted as bool
+    std::atomic<Index32> mOutOfCore = 0; // interpreted as bool
 #endif
 
     /// used for out-of-core, paged reading
@@ -626,12 +625,12 @@ private:
         return TypedAttributeArray::create(n, strideOrTotalSize, constantStride);
     }
 
-    static tbb::atomic<const NamePair*> sTypeName;
+    static std::atomic<const NamePair*> sTypeName;
     std::unique_ptr<StorageType[]>      mData;
     Index                               mSize;
     Index                               mStrideOrTotalSize;
     bool                                mIsUniform = false;
-    tbb::spin_mutex                     mMutex;
+    std::mutex							mMutex;
 }; // class TypedAttributeArray
 
 
@@ -837,7 +836,7 @@ UnitVecCodec::encode(const math::Vec3<T>& val, StorageType& data)
 // TypedAttributeArray implementation
 
 template<typename ValueType_, typename Codec_>
-tbb::atomic<const NamePair*> TypedAttributeArray<ValueType_, Codec_>::sTypeName;
+std::atomic<const NamePair*> TypedAttributeArray<ValueType_, Codec_>::sTypeName;
 
 
 template<typename ValueType_, typename Codec_>
@@ -912,7 +911,7 @@ typename TypedAttributeArray<ValueType_, Codec_>::TypedAttributeArray&
 TypedAttributeArray<ValueType_, Codec_>::operator=(const TypedAttributeArray& rhs)
 {
     if (&rhs != this) {
-        tbb::spin_mutex::scoped_lock lock(mMutex);
+        std::lock_guard<std::mutex> lock(mMutex);
 
         this->deallocate();
 
@@ -944,9 +943,10 @@ template<typename ValueType_, typename Codec_>
 inline const NamePair&
 TypedAttributeArray<ValueType_, Codec_>::attributeType()
 {
-    if (sTypeName == nullptr) {
-        NamePair* s = new NamePair(typeNameAsString<ValueType>(), Codec::name());
-        if (sTypeName.compare_and_swap(s, nullptr) != nullptr) delete s;
+    if (sTypeName.load() == nullptr) {
+		const NamePair* nada = nullptr;
+        const NamePair* s = new NamePair(typeNameAsString<ValueType>(), Codec::name());
+        if (!sTypeName.compare_exchange_strong(nada, s)) delete s;
     }
     return *sTypeName;
 }
@@ -1196,7 +1196,7 @@ TypedAttributeArray<ValueType_, Codec_>::expand(bool fill)
     const StorageType val = mData.get()[0];
 
     {
-        tbb::spin_mutex::scoped_lock lock(mMutex);
+        std::lock_guard<std::mutex> lock(mMutex);
         this->deallocate();
         mIsUniform = false;
         this->allocate();
@@ -1240,7 +1240,7 @@ void
 TypedAttributeArray<ValueType_, Codec_>::collapse(const ValueType& uniformValue)
 {
     if (!mIsUniform) {
-        tbb::spin_mutex::scoped_lock lock(mMutex);
+        std::lock_guard<std::mutex> lock(mMutex);
         this->deallocate();
         mIsUniform = true;
         this->allocate();
@@ -1262,7 +1262,7 @@ void
 TypedAttributeArray<ValueType_, Codec_>::fill(const ValueType& value)
 {
     if (this->isOutOfCore()) {
-        tbb::spin_mutex::scoped_lock lock(mMutex);
+        std::lock_guard<std::mutex> lock(mMutex);
         this->deallocate();
         this->allocate();
     }
@@ -1290,7 +1290,7 @@ TypedAttributeArray<ValueType_, Codec_>::compress()
 
     if (!mIsUniform && !this->isCompressed()) {
 
-        tbb::spin_mutex::scoped_lock lock(mMutex);
+        std::lock_guard<std::mutex> lock(mMutex);
 
         this->doLoadUnsafe(/*compression=*/false);
 
@@ -1334,7 +1334,7 @@ template<typename ValueType_, typename Codec_>
 inline bool
 TypedAttributeArray<ValueType_, Codec_>::decompress()
 {
-    tbb::spin_mutex::scoped_lock lock(mMutex);
+    std::lock_guard<std::mutex> lock(mMutex);
 
     const bool writeCompress = (mSerializationFlags & WRITEMEMCOMPRESS);
 
@@ -1364,7 +1364,7 @@ bool
 TypedAttributeArray<ValueType_, Codec_>::isOutOfCore() const
 {
 #if OPENVDB_ABI_VERSION_NUMBER >= 5
-    return mOutOfCore;
+    return static_cast<Index32>(mOutOfCore.load());
 #else
     return (mFlags & OUTOFCORE);
 #endif
@@ -1376,7 +1376,7 @@ void
 TypedAttributeArray<ValueType_, Codec_>::setOutOfCore(const bool b)
 {
 #if OPENVDB_ABI_VERSION_NUMBER >= 5
-    mOutOfCore = b;
+    mOutOfCore.store(static_cast<Index32>(b));
 #else
     if (b) mFlags = static_cast<uint8_t>(mFlags | OUTOFCORE);
     else   mFlags = static_cast<uint8_t>(mFlags & ~OUTOFCORE);
@@ -1395,7 +1395,7 @@ TypedAttributeArray<ValueType_, Codec_>::doLoad() const
 
     // This lock will be contended at most once, after which this buffer
     // will no longer be out-of-core.
-    tbb::spin_mutex::scoped_lock lock(self->mMutex);
+    std::lock_guard<std::mutex> lock(self->mMutex);
     this->doLoadUnsafe();
 }
 
@@ -1476,7 +1476,7 @@ TypedAttributeArray<ValueType_, Codec_>::readBuffers(std::istream& is)
         OPENVDB_THROW(IoError, "Cannot read paged AttributeArray buffers.");
     }
 
-    tbb::spin_mutex::scoped_lock lock(mMutex);
+    std::lock_guard<std::mutex> lock(mMutex);
 
     this->deallocate();
 
@@ -1539,7 +1539,7 @@ TypedAttributeArray<ValueType_, Codec_>::readPagedBuffers(compression::PagedInpu
 
     assert(mPageHandle);
 
-    tbb::spin_mutex::scoped_lock lock(mMutex);
+    std::lock_guard<std::mutex> lock(mMutex);
 
     this->deallocate();
 
@@ -1763,7 +1763,7 @@ TypedAttributeArray<ValueType_, Codec_>::doLoadUnsafe(const bool compression) co
     // clear all write and out-of-core flags
 
 #if OPENVDB_ABI_VERSION_NUMBER >= 5
-    self->mOutOfCore = false;
+	self->mOutOfCore.store(static_cast<Index32>(false));
 #else
     self->mFlags &= uint8_t(~OUTOFCORE);
 #endif

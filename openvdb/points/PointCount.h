@@ -43,7 +43,9 @@
 #include "PointMask.h" // GridCombinerOp
 #include "IndexFilter.h"
 
+#ifdef OPENVDB_USE_TBB
 #include <tbb/parallel_reduce.h>
+#endif
 
 #include <type_traits>
 #include <vector>

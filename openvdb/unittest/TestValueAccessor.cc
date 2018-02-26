@@ -29,7 +29,11 @@
 ///////////////////////////////////////////////////////////////////////////
 
 #include <cppunit/extensions/HelperMacros.h>
+
+#ifdef OPENVDB_USE_TBB
 #include <tbb/task.h>
+#endif
+
 #include <openvdb/openvdb.h>
 #include <openvdb/tools/Prune.h>
 #include <type_traits>

@@ -31,7 +31,10 @@
 #include <cppunit/extensions/HelperMacros.h>
 #include <openvdb/Types.h>
 #include <sstream>
+
+#ifdef OPENVDB_USE_TBB
 #include <tbb/tbb_stddef.h> // for tbb::split
+#endif
 
 
 class TestCoord: public CppUnit::TestCase

@@ -42,7 +42,10 @@
 #include <openvdb/tree/LeafManager.h>
 #include <openvdb/tree/ValueAccessor.h>
 #include "ValueTransformer.h" // for tools::foreach()
+
+#ifdef OPENVDB_USE_TBB
 #include <tbb/parallel_for.h>
+#endif
 
 
 namespace openvdb {

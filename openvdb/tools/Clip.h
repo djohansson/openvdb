@@ -42,8 +42,12 @@
 #include <openvdb/tree/LeafManager.h>
 #include "GridTransformer.h" // for tools::resampleToMatch()
 #include "Prune.h"
+
+#ifdef OPENVDB_USE_TBB
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_reduce.h>
+#endif
+
 #include <type_traits> // for std::enable_if, std::is_same
 #include <vector>
 
@@ -147,7 +151,7 @@ public:
     typename TreeT::Ptr tree() const { return mNewTree; }
 
     CopyLeafNodes(CopyLeafNodes&, tbb::split);
-    void operator()(const tbb::blocked_range<size_t>&);
+    void operator()(const std::pair<size_t, size_t>&);
     void join(const CopyLeafNodes& rhs) { mNewTree->merge(*rhs.mNewTree); }
 
 private:
@@ -187,7 +191,7 @@ CopyLeafNodes<TreeT>::run(bool threaded)
 
 template<typename TreeT>
 void
-CopyLeafNodes<TreeT>::operator()(const tbb::blocked_range<size_t>& range)
+CopyLeafNodes<TreeT>::operator()(const std::pair<size_t, size_t>& range)
 {
     tree::ValueAccessor<TreeT> acc(*mNewTree);
     tree::ValueAccessor<const TreeT> refAcc(*mTree);

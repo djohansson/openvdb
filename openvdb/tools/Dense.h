@@ -42,7 +42,11 @@
 #include <openvdb/Exceptions.h>
 #include <openvdb/util/Formats.h>
 #include "Prune.h"
+
+#ifdef OPENVDB_USE_TBB
 #include <tbb/parallel_for.h>
+#endif
+
 #include <iostream>
 #include <memory>
 #include <string>
@@ -516,9 +520,9 @@ public:
 
         // Multi-threaded process: Convert dense grid into leaf nodes and tiles
         if (serial) {
-            (*this)(tbb::blocked_range<size_t>(0, mBlocks->size()));
+            (*this)(std::pair<size_t, size_t>(0, mBlocks->size()));
         } else {
-            tbb::parallel_for(tbb::blocked_range<size_t>(0, mBlocks->size()), *this);
+            tbb::parallel_for(std::pair<size_t, size_t>(0, mBlocks->size()), *this);
         }
 
         // Post-process: Insert leaf nodes and tiles into the tree, and prune the tiles only!
@@ -539,7 +543,7 @@ public:
 
     /// @brief Public method called by tbb::parallel_for
     /// @warning Never call this method directly!
-    void operator()(const tbb::blocked_range<size_t> &r) const
+    void operator()(const std::pair<size_t, size_t> &r) const
     {
         assert(mBlocks);
         LeafT* leaf = new LeafT();

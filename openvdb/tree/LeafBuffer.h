@@ -34,8 +34,9 @@
 #include <openvdb/Types.h>
 #include <openvdb/io/Compression.h> // for io::readCompressedValues(), etc
 #include <openvdb/util/NodeMasks.h>
-#include <tbb/atomic.h>
-#include <tbb/spin_mutex.h>
+
+#include <atomic>
+#include <mutex>
 #include <algorithm> // for std::swap
 #include <cstddef> // for offsetof()
 #include <iostream>
@@ -68,12 +69,12 @@ struct LeafBufferFlags
 {
 #if OPENVDB_ABI_VERSION_NUMBER >= 5
     /// The type of LeafBuffer::mOutOfCore
-    using type = tbb::atomic<Index32>;
+    using type = std::atomic<Index32>;
     static constexpr bool IsAtomic = true;
 #else // OPENVDB_ABI_VERSION_NUMBER < 5
     // These structs need to have the same data members as LeafBuffer.
-    struct Atomic { union { T* data; void* ptr; }; tbb::atomic<Index32> i; tbb::spin_mutex mutex; };
-    struct NonAtomic { union { T* data; void* ptr; }; Index32 i; tbb::spin_mutex mutex; };
+    struct Atomic { union { T* data; void* ptr; }; std::atomic<Index32> i; std::mutex mutex; };
+    struct NonAtomic { union { T* data; void* ptr; }; Index32 i; std::mutex mutex; };
 
 #ifndef __INTEL_COMPILER
     /// @c true if LeafBuffer::mOutOfCore is atomic, @c false otherwise
@@ -88,7 +89,7 @@ struct LeafBufferFlags
     /// The size of a LeafBuffer when LeafBuffer::mOutOfCore is atomic
     static constexpr size_t size = sizeof(Atomic);
     /// The type of LeafBuffer::mOutOfCore
-    using type = typename std::conditional<IsAtomic, tbb::atomic<Index32>, Index32>::type;
+    using type = typename std::conditional<IsAtomic, std::atomic<Index32>, Index32>::type;
 #endif
 };
 
@@ -226,7 +227,7 @@ private:
         FileInfo*  mFileInfo;
     };
     FlagsType mOutOfCore; // interpreted as bool; extra bits reserved for future use
-    tbb::spin_mutex mMutex; // 1 byte
+    std::mutex mMutex; // ? byte
     //int8_t mReserved[3]; // padding for alignment
 
     static const ValueType sZero;
@@ -273,7 +274,7 @@ template<typename T, Index Log2Dim>
 inline
 LeafBuffer<T, Log2Dim>::LeafBuffer(const LeafBuffer& other)
     : mData(nullptr)
-    , mOutOfCore(other.mOutOfCore)
+    , mOutOfCore(other.mOutOfCore.load())
 {
     if (other.isOutOfCore()) {
         mFileInfo = new FileInfo(*other.mFileInfo);
@@ -401,7 +402,7 @@ LeafBuffer<T, Log2Dim>::data() const
     if (mData == nullptr) {
         LeafBuffer* self = const_cast<LeafBuffer*>(this);
         // This lock will be contended at most once.
-        tbb::spin_mutex::scoped_lock lock(self->mMutex);
+        std::lock_guard<std::mutex> lock(self->mMutex);
         if (mData == nullptr) self->mData = new ValueType[SIZE];
     }
 #endif
@@ -416,7 +417,7 @@ LeafBuffer<T, Log2Dim>::data()
     this->loadValues();
     if (mData == nullptr) {
         // This lock will be contended at most once.
-        tbb::spin_mutex::scoped_lock lock(mMutex);
+		std::lock_guard<std::mutex> lock(mMutex);
         if (mData == nullptr) mData = new ValueType[SIZE];
     }
 #endif
@@ -465,7 +466,7 @@ LeafBuffer<T, Log2Dim>::doLoad() const
 
     // This lock will be contended at most once, after which this buffer
     // will no longer be out-of-core.
-    tbb::spin_mutex::scoped_lock lock(self->mMutex);
+	std::lock_guard<std::mutex> lock(self->mMutex);
     if (!this->isOutOfCore()) return;
 
     std::unique_ptr<FileInfo> info(self->mFileInfo);

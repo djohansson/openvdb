@@ -34,7 +34,7 @@
 //#endif
 #include "tools/PointIndexGrid.h"
 #include "util/logging.h"
-#include <tbb/mutex.h>
+#include <mutex>
 #ifdef OPENVDB_USE_BLOSC
 #include <blosc.h>
 #endif
@@ -43,8 +43,8 @@ namespace openvdb {
 OPENVDB_USE_VERSION_NAMESPACE
 namespace OPENVDB_VERSION_NAME {
 
-typedef tbb::mutex Mutex;
-typedef Mutex::scoped_lock Lock;
+using Mutex = std::mutex;
+using Lock = std::lock_guard<Mutex>;
 
 namespace {
 // Declare this at file scope to ensure thread-safe initialization.

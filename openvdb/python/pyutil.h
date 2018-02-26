@@ -33,8 +33,9 @@
 
 #include "openvdb/openvdb.h"
 #include <boost/python.hpp>
-#include <tbb/mutex.h>
+
 #include <map> // for std::pair
+#include <mutex>
 #include <string>
 #include <sstream>
 

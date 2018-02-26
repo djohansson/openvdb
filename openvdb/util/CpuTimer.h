@@ -33,7 +33,11 @@
 
 #include <openvdb/version.h>
 #include <string>
+
+#ifdef OPENVDB_USE_TBB
 #include <tbb/tick_count.h>
+#endif
+
 #include <iostream>// for std::cerr
 #include <sstream>// for ostringstream
 #include <iomanip>//for setprecision

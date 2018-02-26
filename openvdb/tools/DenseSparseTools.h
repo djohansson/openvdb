@@ -31,10 +31,13 @@
 #ifndef OPENVDB_TOOLS_DENSESPARSETOOLS_HAS_BEEN_INCLUDED
 #define OPENVDB_TOOLS_DENSESPARSETOOLS_HAS_BEEN_INCLUDED
 
+#ifdef OPENVDB_USE_TBB
 #include <tbb/parallel_reduce.h>
 #include <tbb/blocked_range3d.h>
 #include <tbb/blocked_range2d.h>
 #include <tbb/blocked_range.h>
+#endif
+
 #include <openvdb/Types.h>
 #include <openvdb/tree/LeafManager.h>
 #include "Dense.h"
@@ -470,7 +473,7 @@ public:
 
     typename ResultTreeType::Ptr extract(bool threaded = true) {
 
-        tbb::blocked_range<size_t> range(0, mLeafVec.size());
+        std::pair<size_t, size_t> range(0, mLeafVec.size());
 
         if (threaded) {
             tbb::parallel_reduce(range, *this);
@@ -484,7 +487,7 @@ public:
 
     // Used in looping over leaf nodes in the masked grid
     // and using the active mask to select data to
-    void operator()(const tbb::blocked_range<size_t>& range) {
+    void operator()(const std::pair<size_t, size_t>& range) {
 
         ResultLeafNodeType* leaf = NULL;
 

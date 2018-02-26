@@ -48,7 +48,9 @@
 #include <openvdb/math/FiniteDifference.h> // for math::BiasedGradientScheme
 #include <openvdb/util/NullInterrupter.h>
 
+#ifdef OPENVDB_USE_TBB
 #include <tbb/task_group.h>
+#endif
 
 
 namespace openvdb {
@@ -133,7 +135,7 @@ struct OffsetAndMinComp
     {
     }
 
-    void operator()(const tbb::blocked_range<size_t>& range) const
+    void operator()(const std::pair<size_t, size_t>& range) const
     {
         typedef typename LeafNodeType::ValueOnIter Iterator;
 
@@ -195,7 +197,7 @@ smoothLevelSet(GridType& grid, int iterations, int halfBandWidthInVoxels, Interr
 
     const ValueType offset = ValueType(double(0.5) * grid.transform().voxelSize()[0]);
 
-    tbb::parallel_for(tbb::blocked_range<size_t>(0, nodes.size()),
+    tbb::parallel_for(std::pair<size_t, size_t>(0, nodes.size()),
         OffsetAndMinComp<TreeType>(nodes, filterGrid.tree(), -offset));
 
     // Clean up any damanage that was done by the min operation

@@ -51,7 +51,9 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <boost/version.hpp> // for BOOST_VERSION
 
+#ifdef OPENVDB_USE_TBB
 #include <tbb/atomic.h>
+#endif
 
 #ifdef _MSC_VER
 #include <boost/interprocess/detail/os_file_functions.hpp> // open_existing_file(), close_file()
@@ -119,7 +121,7 @@ private:
         boost::interprocess::mapped_region mRegion;
         bool mAutoDelete = false;
         Notifier mNotifier;
-        mutable tbb::atomic<openvdb::Index64> mLastWriteTime;
+        mutable std::atomic<openvdb::Index64> mLastWriteTime;
     }; // class Impl
     std::unique_ptr<Impl> mImpl;
 }; // class ProxyMappedFile

@@ -43,8 +43,12 @@
 #include "LevelSetRebuild.h" // for doLevelSetRebuild()
 #include "SignedFloodFill.h" // for signedFloodFill
 #include "Prune.h" // for pruneLevelSet
+
+#ifdef OPENVDB_USE_TBB
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_reduce.h>
+#endif
+
 #include <cmath>
 #include <functional>
 

@@ -48,20 +48,20 @@ using AttributeFactoryMap = std::map<NamePair, AttributeArray::FactoryMethod>;
 
 struct LockedAttributeRegistry
 {
-    tbb::spin_mutex     mMutex;
+    std::mutex			mMutex;
     AttributeFactoryMap mMap;
 };
 
 
 // Declare this at file scope to ensure thread-safe initialization.
-tbb::spin_mutex sInitAttributeRegistryMutex;
+std::mutex sInitAttributeRegistryMutex;
 
 
 // Global function for accessing the registry
 LockedAttributeRegistry*
 getAttributeRegistry()
 {
-    tbb::spin_mutex::scoped_lock lock(sInitAttributeRegistryMutex);
+    std::lock_guard<std::mutex> lock(sInitAttributeRegistryMutex);
 
     static LockedAttributeRegistry* registry = nullptr;
 
@@ -90,12 +90,23 @@ __pragma(warning(default:1711))
 
 // AttributeArray implementation
 
+AttributeArray::AttributeArray(const AttributeArray& rhs)
+: mCompressedBytes(rhs.mCompressedBytes)
+, mFlags(rhs.mFlags)
+, mSerializationFlags(rhs.mSerializationFlags)
+#if OPENVDB_ABI_VERSION_NUMBER >= 5
+, mOutOfCore(rhs.mOutOfCore.load())
+#endif
+, mPageHandle(rhs.mPageHandle)
+{
+}
+
 
 AttributeArray::Ptr
 AttributeArray::create(const NamePair& type, Index length, Index stride, bool constantStride)
 {
     LockedAttributeRegistry* registry = getAttributeRegistry();
-    tbb::spin_mutex::scoped_lock lock(registry->mMutex);
+    std::lock_guard<std::mutex> lock(registry->mMutex);
 
     auto iter = registry->mMap.find(type);
 
@@ -111,7 +122,7 @@ bool
 AttributeArray::isRegistered(const NamePair& type)
 {
     LockedAttributeRegistry* registry = getAttributeRegistry();
-    tbb::spin_mutex::scoped_lock lock(registry->mMutex);
+    std::lock_guard<std::mutex> lock(registry->mMutex);
     return (registry->mMap.find(type) != registry->mMap.end());
 }
 
@@ -120,7 +131,7 @@ void
 AttributeArray::clearRegistry()
 {
     LockedAttributeRegistry* registry = getAttributeRegistry();
-    tbb::spin_mutex::scoped_lock lock(registry->mMutex);
+    std::lock_guard<std::mutex> lock(registry->mMutex);
     registry->mMap.clear();
 }
 
@@ -129,7 +140,7 @@ void
 AttributeArray::registerType(const NamePair& type, FactoryMethod factory)
 {
     LockedAttributeRegistry* registry = getAttributeRegistry();
-    tbb::spin_mutex::scoped_lock lock(registry->mMutex);
+    std::lock_guard<std::mutex> lock(registry->mMutex);
 
     auto iter = registry->mMap.find(type);
 
@@ -147,7 +158,7 @@ void
 AttributeArray::unregisterType(const NamePair& type)
 {
     LockedAttributeRegistry* registry = getAttributeRegistry();
-    tbb::spin_mutex::scoped_lock lock(registry->mMutex);
+    std::lock_guard<std::mutex> lock(registry->mMutex);
 
     registry->mMap.erase(type);
 }

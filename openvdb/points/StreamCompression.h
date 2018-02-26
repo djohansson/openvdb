@@ -47,7 +47,8 @@
 #define OPENVDB_TOOLS_STREAM_COMPRESSION_HAS_BEEN_INCLUDED
 
 #include <openvdb/io/io.h>
-#include <tbb/spin_mutex.h>
+
+#include <mutex>
 #include <memory>
 #include <string>
 
@@ -185,7 +186,7 @@ private:
 
     std::unique_ptr<Info> mInfo = std::unique_ptr<Info>(new Info);
     std::unique_ptr<char[]> mData;
-    tbb::spin_mutex mMutex;
+    std::mutex mMutex;
 }; // class Page
 
 

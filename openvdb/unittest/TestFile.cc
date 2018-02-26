@@ -40,8 +40,13 @@
 #include <openvdb/version.h>
 #include <openvdb/openvdb.h>
 #include "util.h" // for unittest_util::makeSphere()
+
 #include <cppunit/extensions/HelperMacros.h>
+
+#ifdef OPENVDB_USE_TBB
 #include <tbb/tbb_thread.h> // for tbb::this_tbb_thread::sleep()
+#endif
+
 #include <algorithm> // for std::sort()
 #include <cstdio> // for remove() and rename()
 #include <fstream>

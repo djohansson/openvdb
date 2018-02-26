@@ -37,15 +37,17 @@
 #include "Stream.h"
 #include <openvdb/Exceptions.h>
 #include <openvdb/util/logging.h>
-#include <tbb/atomic.h>
+#ifdef OPENVDB_USE_TBB
 #include <tbb/concurrent_hash_map.h>
-#include <tbb/mutex.h>
 #include <tbb/task.h>
 #include <tbb/tbb_thread.h> // for tbb::this_tbb_thread::sleep()
-#include <tbb/tick_count.h>
+#endif
+#include <atomic>
+#include <mutex>
 #include <algorithm> // for std::max()
 #include <iostream>
 #include <map>
+#include <unordered_map>
 
 
 namespace openvdb {
@@ -55,16 +57,29 @@ namespace io {
 
 namespace {
 
-using Mutex = tbb::mutex;
-using Lock = Mutex::scoped_lock;
-
+using Mutex = std::mutex;
+using Lock = std::lock_guard<Mutex>;
 
 // Abstract base class for queuable TBB tasks that adds a task completion callback
-class Task: public tbb::task
+class Task
+#ifdef OPENVDB_USE_TBB
+	: public tbb::task
+#endif
 {
 public:
+#ifdef OPENVDB_USE_TBB
+	using TaskPtr = tbb::task*;
+#define TASKBASE_OVVERRIDE override
+#else
+	using TaskPtr = Task*;
+#define TASKBASE_OVVERRIDE
+#endif
+
     Task(Queue::Id id): mId(id) {}
-    ~Task() override {}
+	~Task() TASKBASE_OVVERRIDE
+	{}
+
+	virtual TaskPtr execute() = 0;
 
     Queue::Id id() const { return mId; }
 
@@ -91,7 +106,7 @@ public:
         , mMetadata(metadata)
     {}
 
-    tbb::task* execute() override
+    TaskPtr execute() TASKBASE_OVVERRIDE
     {
         Queue::Status status = Queue::FAILED;
         try {
@@ -124,7 +139,11 @@ struct Queue::Impl
 {
     using NotifierMap = std::map<Queue::Id, Queue::Notifier>;
     /// @todo Provide more information than just "succeeded" or "failed"?
+#ifdef OPENVDB_USE_TBB
     using StatusMap = tbb::concurrent_hash_map<Queue::Id, Queue::Status>;
+#else
+	using StatusMap = std::unordered_map<Queue::Id, Queue::Status>;
+#endif
 
 
     Impl()
@@ -144,9 +163,14 @@ struct Queue::Impl
     // This method might be called from multiple threads.
     void setStatus(Queue::Id id, Queue::Status status)
     {
+#ifdef OPENVDB_USE_TBB
         StatusMap::accessor acc;
         mStatus.insert(acc, id);
         acc->second = status;
+#else
+		std::lock_guard<std::mutex> lock(mStatusMutex);
+		mStatus[id] = status;
+#endif
     }
 
     // This method might be called from multiple threads.
@@ -180,10 +204,15 @@ struct Queue::Impl
         // the task's entry from the status map.
         if (completed) {
             if (didNotify) {
+#ifdef OPENVDB_USE_TBB
                 StatusMap::accessor acc;
                 if (mStatus.find(acc, id)) {
                     mStatus.erase(acc);
                 }
+#else
+				std::lock_guard<std::mutex> lock(mStatusMutex);
+				mStatus.erase(id);
+#endif
             }
             --mNumTasks;
         }
@@ -193,27 +222,36 @@ struct Queue::Impl
 
     void enqueue(Task& task)
     {
+#ifdef OPENVDB_USE_TBB
         tbb::tick_count start = tbb::tick_count::now();
         while (!canEnqueue()) {
-            tbb::this_tbb_thread::sleep(tbb::tick_count::interval_t(0.5/*sec*/));
+            tbb::this_tbb_thread::sleep(tbb::tick_count::interval_t(0.5/*sec*/)); // WAT?
             if ((tbb::tick_count::now() - start).seconds() > double(mTimeout)) {
                 OPENVDB_THROW(RuntimeError,
                     "unable to queue I/O task; " << mTimeout << "-second time limit expired");
             }
         }
+#endif
         Queue::Notifier notify = std::bind(&Impl::setStatusWithNotification, this,
             std::placeholders::_1, std::placeholders::_2);
         task.setNotifier(notify);
         this->setStatus(task.id(), Queue::PENDING);
+#ifdef OPENVDB_USE_TBB
         tbb::task::enqueue(task);
+#else
+		task.execute(); // [djo]: todo: move to std::packaged_task/std::thread
+#endif
         ++mNumTasks;
     }
 
     Index32 mTimeout;
     Index32 mCapacity;
-    tbb::atomic<Int32> mNumTasks;
+    std::atomic<Int32> mNumTasks;
     Index32 mNextId;
     StatusMap mStatus;
+#ifndef OPENVDB_USE_TBB
+	std::mutex mStatusMutex;
+#endif
     NotifierMap mNotifiers;
     Index32 mNextNotifierId;
     Mutex mNotifierMutex;
@@ -231,6 +269,7 @@ Queue::Queue(Index32 capacity): mImpl(new Impl)
 
 Queue::~Queue()
 {
+#ifdef OPENVDB_USE_TBB
     // Wait for all queued tasks to complete (successfully or unsuccessfully).
     /// @todo Allow the queue to be destroyed while there are uncompleted tasks
     /// (e.g., by keeping a static registry of queues that also dispatches
@@ -238,6 +277,7 @@ Queue::~Queue()
     while (mImpl->mNumTasks > 0) {
         tbb::this_tbb_thread::sleep(tbb::tick_count::interval_t(0.5/*sec*/));
     }
+#endif
 }
 
 
@@ -267,6 +307,7 @@ void Queue::setTimeout(Index32 sec) { mImpl->mTimeout = sec; }
 Queue::Status
 Queue::status(Id id) const
 {
+#ifdef OPENVDB_USE_TBB
     Impl::StatusMap::const_accessor acc;
     if (mImpl->mStatus.find(acc, id)) {
         const Status status = acc->second;
@@ -275,6 +316,16 @@ Queue::status(Id id) const
         }
         return status;
     }
+#else
+	const auto it = mImpl->mStatus.find(id);
+	if (it != mImpl->mStatus.end()) {
+		const Status status = it->second;
+		if (status == SUCCEEDED || status == FAILED) {
+			mImpl->mStatus.erase(it);
+		}
+		return status;
+	}
+#endif
     return UNKNOWN;
 }
 
@@ -323,13 +374,22 @@ Queue::writeGridVec(const GridCPtrVec& grids, const Archive& archive, const Meta
 {
     const Queue::Id taskId = mImpl->mNextId++;
     // From the "GUI Thread" chapter in the TBB Design Patterns guide
+#ifdef OPENVDB_USE_TBB
+	OutputTask* taskMem = tbb::task::allocate_root();
+#else
+	char taskMem[sizeof(OutputTask)]; // we will call execute directly in enqueue, so fine to allocate on stack
+#endif
+
     OutputTask* task =
-        new(tbb::task::allocate_root()) OutputTask(taskId, grids, archive, metadata);
+        new(taskMem) OutputTask(taskId, grids, archive, metadata);
+
     try {
         mImpl->enqueue(*task);
     } catch (openvdb::RuntimeError&) {
+#ifdef OPENVDB_USE_TBB
         // Destroy the task if it could not be enqueued, then rethrow the exception.
         tbb::task::destroy(*task);
+#endif
         throw;
     }
     return taskId;

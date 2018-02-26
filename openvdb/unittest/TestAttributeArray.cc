@@ -46,8 +46,11 @@
 #endif
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
+
+#ifdef OPENVDB_USE_TBB
 #include <tbb/tick_count.h>
 #include <tbb/atomic.h>
+#endif
 
 #include <fstream>
 #include <sstream>
@@ -106,7 +109,7 @@ private:
         boost::interprocess::mapped_region mRegion;
         bool mAutoDelete = false;
         Notifier mNotifier;
-        mutable tbb::atomic<openvdb::Index64> mLastWriteTime;
+        mutable std::atomic<openvdb::Index64> mLastWriteTime;
     }; // class Impl
     std::unique_ptr<Impl> mImpl;
 }; // class ProxyMappedFile

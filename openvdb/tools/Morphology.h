@@ -54,10 +54,14 @@
 #include <openvdb/tree/LeafManager.h>
 #include "Prune.h"// for pruneLevelSet
 #include "ValueTransformer.h" // for foreach()
+
+#ifdef OPENVDB_USE_TBB
 #include <tbb/tbb_thread.h>
 #include <tbb/task_scheduler_init.h>
 #include <tbb/enumerable_thread_specific.h>
 #include <tbb/parallel_for.h>
+#endif
+
 #include <type_traits>
 
 
@@ -389,7 +393,7 @@ protected:
     };// LeafCache
 
     struct ErodeVoxelsOp {
-        typedef tbb::blocked_range<size_t> RangeT;
+        typedef std::pair<size_t, size_t> RangeT;
         ErodeVoxelsOp(std::vector<MaskType>& masks, ManagerType& manager)
             : mTask(0), mSavedMasks(masks) , mManager(manager) {}
         void runParallel(NearestNeighbors nn);
@@ -410,7 +414,7 @@ protected:
 
         void save() { mSaveMasks = true; tbb::parallel_for(mManager.getRange(), *this); }
         void update() { mSaveMasks = false; tbb::parallel_for(mManager.getRange(), *this); }
-        void operator()(const tbb::blocked_range<size_t>& range) const
+        void operator()(const std::pair<size_t, size_t>& range) const
         {
             if (mSaveMasks) {
                 for (size_t i = range.begin(); i < range.end(); ++i) {
@@ -432,7 +436,7 @@ protected:
         UpdateMasks(const std::vector<MaskType>& masks, ManagerType& manager)
             : mMasks(masks), mManager(manager) {}
         void update() { tbb::parallel_for(mManager.getRange(), *this); }
-        void operator()(const tbb::blocked_range<size_t>& r) const {
+        void operator()(const std::pair<size_t, size_t>& r) const {
             for (size_t i=r.begin(); i<r.end(); ++i) mManager.leaf(i).setValueMask(mMasks[i]);
         }
         const std::vector<MaskType>& mMasks;
@@ -442,7 +446,7 @@ protected:
         CopyMasks(std::vector<MaskType>& masks, const ManagerType& manager)
             : mMasks(masks), mManager(manager) {}
         void copy() { tbb::parallel_for(mManager.getRange(), *this); }
-        void operator()(const tbb::blocked_range<size_t>& r) const {
+        void operator()(const std::pair<size_t, size_t>& r) const {
             for (size_t i=r.begin(); i<r.end(); ++i) mMasks[i]=mManager.leaf(i).getValueMask();
         }
         std::vector<MaskType>& mMasks;

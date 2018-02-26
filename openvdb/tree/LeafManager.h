@@ -44,9 +44,13 @@
 
 #include <openvdb/Types.h>
 #include "TreeIterator.h" // for CopyConstness
+
+#ifdef OPENVDB_USE_TBB
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_reduce.h>
+#endif
+
 #include <functional>
 #include <type_traits>
 
@@ -119,7 +123,7 @@ public:
     using LeafIterType = typename leafmgr::TreeTraits<TreeT>::LeafIterType;
     using NonConstBufferType = typename LeafType::Buffer;
     using BufferType = typename CopyConstness<TreeType, NonConstBufferType>::Type;
-    using RangeType = tbb::blocked_range<size_t>; // leaf index range
+    using RangeType = std::pair<size_t, size_t>; // leaf index range
     static const Index DEPTH = 2; // root + leaf nodes
 
     static const bool IsConstTree = leafmgr::TreeTraits<TreeT>::IsConstTree;

@@ -32,7 +32,7 @@
 
 #include <openvdb/Metadata.h>
 #include <openvdb/util/Name.h>
-#include <tbb/mutex.h>
+#include <mutex>
 
 
 namespace openvdb {
@@ -63,8 +63,8 @@ namespace {
 using GridFactoryMap = std::map<Name, GridBase::GridFactory>;
 using GridFactoryMapCIter = GridFactoryMap::const_iterator;
 
-using Mutex = tbb::mutex;
-using Lock = Mutex::scoped_lock;
+using Mutex = std::mutex;
+using Lock = std::lock_guard<Mutex>;
 
 struct LockedGridRegistry {
     LockedGridRegistry() {}

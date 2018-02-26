@@ -35,6 +35,7 @@
 /// @note This is intended mainly as an example of how to ray-trace
 /// OpenVDB volumes.  It is not a production-quality renderer.
 
+#include <chrono>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -49,8 +50,9 @@
 #include <OpenEXR/ImfHeader.h>
 #include <OpenEXR/ImfOutputFile.h>
 #include <OpenEXR/ImfPixelType.h>
+#ifdef OPENVDB_USE_TBB
 #include <tbb/task_scheduler_init.h>
-#include <tbb/tick_count.h>
+#endif
 #include <openvdb/openvdb.h>
 #include <openvdb/tools/RayIntersector.h>
 #include <openvdb/tools/RayTracer.h>
@@ -60,6 +62,9 @@
 
 
 namespace {
+
+using hires_clock = std::chrono::high_resolution_clock;
+using time_point = hires_clock::time_point;
 
 const char* gProgName = "";
 
@@ -266,7 +271,8 @@ saveEXR(const std::string& fname, const openvdb::tools::Film& film, const Render
         std::cout << gProgName << ": writing " << filename << "..." << std::endl;
     }
 
-    const tbb::tick_count start = tbb::tick_count::now();
+
+    const time_point start = hires_clock::now();
 
     int threads = (opts.threads == 0 ? 8 : opts.threads);
     Imf::setGlobalThreadCount(threads);
@@ -306,7 +312,7 @@ saveEXR(const std::string& fname, const openvdb::tools::Film& film, const Render
     if (opts.verbose) {
         std::ostringstream ostr;
         ostr << gProgName << ": ...completed in " << std::setprecision(3)
-            << (tbb::tick_count::now() - start).seconds() << " sec";
+            << std::chrono::duration_cast<std::chrono::seconds>(hires_clock::now() - start).count() << " sec";
         std::cout << ostr.str() << std::endl;
     }
 }
@@ -372,7 +378,7 @@ render(const GridType& grid, const std::string& imgFilename, const RenderOpts& o
         if (!gridName.empty()) std::cout << " " << gridName;
         std::cout << "..." << std::endl;
     }
-    const tbb::tick_count start = tbb::tick_count::now();
+    const time_point start = hires_clock::now();
 
     if (isLevelSet) {
         tools::LevelSetRayIntersector<GridType> intersector(
@@ -399,7 +405,7 @@ render(const GridType& grid, const std::string& imgFilename, const RenderOpts& o
     if (opts.verbose) {
         std::ostringstream ostr;
         ostr << gProgName << ": ...completed in " << std::setprecision(3)
-            << (tbb::tick_count::now() - start).seconds() << " sec";
+            << std::chrono::duration_cast<std::chrono::seconds>(hires_clock::now() - start).count() << " sec";
         std::cout << ostr.str() << std::endl;
     }
 
@@ -637,12 +643,14 @@ main(int argc, char *argv[])
     }
 
     try {
+#ifdef OPENVDB_USE_TBB
         tbb::task_scheduler_init schedulerInit(
             (opts.threads == 0) ? tbb::task_scheduler_init::automatic : opts.threads);
+#endif
 
         openvdb::initialize();
 
-        const tbb::tick_count start = tbb::tick_count::now();
+        const time_point start = hires_clock::now();
         if (opts.verbose) {
             std::cout << gProgName << ": reading ";
             if (!gridName.empty()) std::cout << gridName << " from ";
@@ -694,7 +702,7 @@ main(int argc, char *argv[])
         if (opts.verbose) {
             std::ostringstream ostr;
             ostr << gProgName << ": ...completed in " << std::setprecision(3)
-                << (tbb::tick_count::now() - start).seconds() << " sec";
+                << std::chrono::duration_cast<std::chrono::seconds>(hires_clock::now() - start).count() << " sec";
             std::cout << ostr.str() << std::endl;
         }
 

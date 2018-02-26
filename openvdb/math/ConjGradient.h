@@ -41,8 +41,10 @@
 #include <openvdb/util/logging.h>
 #include <openvdb/util/NullInterrupter.h>
 #include "Math.h" // for Abs(), isZero(), Max(), Sqrt()
+#ifdef OPENVDB_USE_TBB
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_reduce.h>
+#endif
 #include <algorithm> // for std::lower_bound()
 #include <cassert>
 #include <cmath> // for std::isfinite()
@@ -59,7 +61,7 @@ namespace pcg {
 
 using SizeType = Index32;
 
-using SizeRange = tbb::blocked_range<SizeType>;
+using SizeRange = std::pair<SizeType, SizeType>;
 
 template<typename ValueType> class Vector;
 
@@ -519,7 +521,7 @@ struct CopyOp
     CopyOp(const T* from_, T* to_): from(from_), to(to_) {}
 
     void operator()(const SizeRange& range) const {
-        for (SizeType n = range.begin(), N = range.end(); n < N; ++n) to[n] = from[n];
+        for (SizeType n = range.first, N = range.second; n < N; ++n) to[n] = from[n];
     }
 
     const T* from;
@@ -534,7 +536,7 @@ struct FillOp
     FillOp(T* data_, const T& val_): data(data_), val(val_) {}
 
     void operator()(const SizeRange& range) const {
-        for (SizeType n = range.begin(), N = range.end(); n < N; ++n) data[n] = val;
+        for (SizeType n = range.first, N = range.second; n < N; ++n) data[n] = val;
     }
 
     T* data;
@@ -550,11 +552,11 @@ struct LinearOp
 
     void operator()(const SizeRange& range) const {
         if (isExactlyEqual(a, T(1))) {
-            for (SizeType n = range.begin(), N = range.end(); n < N; ++n) out[n] = x[n] + y[n];
+            for (SizeType n = range.first, N = range.second; n < N; ++n) out[n] = x[n] + y[n];
         } else if (isExactlyEqual(a, T(-1))) {
-            for (SizeType n = range.begin(), N = range.end(); n < N; ++n) out[n] = -x[n] + y[n];
+            for (SizeType n = range.first, N = range.second; n < N; ++n) out[n] = -x[n] + y[n];
         } else {
-            for (SizeType n = range.begin(), N = range.end(); n < N; ++n) out[n] = a * x[n] + y[n];
+            for (SizeType n = range.first, N = range.second; n < N; ++n) out[n] = a * x[n] + y[n];
         }
     }
 
@@ -585,8 +587,12 @@ template<typename T>
 inline
 Vector<T>::Vector(const Vector& other): mData(new T[other.mSize]), mSize(other.mSize)
 {
+#ifdef OPENVDB_USE_TBB
     tbb::parallel_for(SizeRange(0, mSize),
         internal::CopyOp<T>(/*from=*/other.mData, /*to=*/mData));
+#else
+	(internal::CopyOp<T>(/*from=*/other.mData, /*to=*/mData))(SizeRange(0, mSize));
+#endif
 }
 
 
@@ -637,7 +643,7 @@ struct Vector<T>::ScaleOp
     ScaleOp(T* data_, const Scalar& s_): data(data_), s(s_) {}
 
     void operator()(const SizeRange& range) const {
-        for (SizeType n = range.begin(), N = range.end(); n < N; ++n) data[n] *= s;
+        for (SizeType n = range.first, N = range.second; n < N; ++n) data[n] *= s;
     }
 
     T* data;
@@ -666,7 +672,7 @@ struct Vector<T>::DeterministicDotProductOp
         const SizeType binSize = arraySize / binCount;
 
         // Iterate over bins (array segments)
-        for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
+        for (SizeType n = range.first, N = range.second; n < N; ++n) {
             const SizeType begin = n * binSize;
             const SizeType end = (n == binCount-1) ? arraySize : begin + binSize;
 
@@ -735,7 +741,7 @@ struct Vector<T>::InfNormOp
 
     T operator()(const SizeRange& range, T maxValue) const
     {
-        for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
+        for (SizeType n = range.first, N = range.second; n < N; ++n) {
             maxValue = Max(maxValue, Abs(data[n]));
         }
         return maxValue;
@@ -764,7 +770,7 @@ struct Vector<T>::IsFiniteOp
     bool operator()(const SizeRange& range, bool finite) const
     {
         if (finite) {
-            for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
+            for (SizeType n = range.first, N = range.second; n < N; ++n) {
                 if (!std::isfinite(data[n])) return false;
             }
         }
@@ -796,7 +802,7 @@ struct Vector<T>::EqOp
     bool operator()(const SizeRange& range, bool equal) const
     {
         if (equal) {
-            for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
+            for (SizeType n = range.first, N = range.second; n < N; ++n) {
                 if (!isApproxEqual(a[n], b[n], eps)) return false;
             }
         }
@@ -871,7 +877,7 @@ struct SparseStencilMatrix<ValueType, STENCIL_SIZE>::MatrixCopyOp
         const SizeType* fromCol = from->mColumnIdxArray.get();
         ValueType* toVal = to->mValueArray.get();
         SizeType* toCol = to->mColumnIdxArray.get();
-        for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
+        for (SizeType n = range.first, N = range.second; n < N; ++n) {
             toVal[n] = fromVal[n];
             toCol[n] = fromCol[n];
         }
@@ -935,7 +941,7 @@ struct SparseStencilMatrix<ValueType, STENCIL_SIZE>::RowScaleOp
 
     void operator()(const SizeRange& range) const
     {
-        for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
+        for (SizeType n = range.first, N = range.second; n < N; ++n) {
             RowEditor row = mat->getRowEditor(n);
             row.scale(s);
         }
@@ -965,7 +971,7 @@ struct SparseStencilMatrix<ValueType, STENCIL_SIZE>::VecMultOp
 
     void operator()(const SizeRange& range) const
     {
-        for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
+        for (SizeType n = range.first, N = range.second; n < N; ++n) {
             ConstRow row = mat->getConstRow(n);
             out[n] = row.dot(in, mat->numRows());
         }
@@ -1019,7 +1025,7 @@ struct SparseStencilMatrix<ValueType, STENCIL_SIZE>::EqOp
     bool operator()(const SizeRange& range, bool equal) const
     {
         if (equal) {
-            for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
+            for (SizeType n = range.first, N = range.second; n < N; ++n) {
                 if (!a->getConstRow(n).eq(b->getConstRow(n), eps)) return false;
             }
         }
@@ -1054,7 +1060,7 @@ struct SparseStencilMatrix<ValueType, STENCIL_SIZE>::IsFiniteOp
     bool operator()(const SizeRange& range, bool finite) const
     {
         if (finite) {
-            for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
+            for (SizeType n = range.first, N = range.second; n < N; ++n) {
                 const ConstRow row = mat->getConstRow(n);
                 for (ConstValueIter it = row.cbegin(); it; ++it) {
                     if (!std::isfinite(*it)) return false;
@@ -1343,7 +1349,7 @@ private:
     {
         InitOp(const MatrixType& m, ValueType* v): mat(&m), vec(v) {}
         void operator()(const SizeRange& range) const {
-            for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
+            for (SizeType n = range.first, N = range.second; n < N; ++n) {
                 const ValueType val = mat->getValue(n, n);
                 assert(!isApproxZero(val, ValueType(0.0001)));
                 vec[n] = static_cast<ValueType>(1.0 / val);
@@ -1358,7 +1364,7 @@ private:
         ApplyOp(const ValueType* x_, const ValueType* y_, ValueType* out_):
             x(x_), y(y_), out(out_) {}
         void operator()(const SizeRange& range) const {
-            for (SizeType n = range.begin(), N = range.end(); n < N; ++n) out[n] = x[n] * y[n];
+            for (SizeType n = range.first, N = range.second; n < N; ++n) out[n] = x[n] * y[n];
         }
         const ValueType *x, *y; ValueType* out;
     };
@@ -1539,7 +1545,7 @@ private:
     {
         CopyToLowerOp(const MatrixType& m, TriangularMatrix& l): mat(&m), lower(&l) {}
         void operator()(const SizeRange& range) const {
-            for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
+            for (SizeType n = range.first, N = range.second; n < N; ++n) {
                 typename TriangularMatrix::RowEditor outRow = lower->getRowEditor(n);
                 outRow.clear();
                 typename MatrixType::ConstRow inRow = mat->getConstRow(n);
@@ -1558,7 +1564,7 @@ private:
         TransposeOp(const MatrixType& m, const TriangularMatrix& l, TriangularMatrix& u):
             mat(&m), lower(&l), upper(&u) {}
         void operator()(const SizeRange& range) const {
-            for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
+            for (SizeType n = range.first, N = range.second; n < N; ++n) {
                 typename TriangularMatrix::RowEditor outRow = upper->getRowEditor(n);
                 outRow.clear();
                 // Use the fact that matrix is symmetric.

@@ -33,8 +33,11 @@
 #ifndef OPENVDB_TREE_TREEITERATOR_HAS_BEEN_INCLUDED
 #define OPENVDB_TREE_TREEITERATOR_HAS_BEEN_INCLUDED
 
+#ifdef OPENVDB_USE_TBB
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
+#endif
+
 #include <openvdb/external/brigand.hpp>
 #include <openvdb/version.h>
 #include <openvdb/Types.h>

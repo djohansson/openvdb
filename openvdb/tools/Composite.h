@@ -46,11 +46,13 @@
 #include "Prune.h"// for prune
 #include "SignedFloodFill.h" // for signedFloodFill()
 
+#ifdef OPENVDB_USE_TBB
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_reduce.h>
 #include <tbb/task_group.h>
 #include <tbb/task_scheduler_init.h>
+#endif
 
 #include <type_traits>
 #include <functional>
@@ -200,11 +202,11 @@ struct BuildPrimarySegment
             mLhsTree->getNodes(internalNodes);
 
             ProcessInternalNodes op(internalNodes, *mRhsTree, *mSegment, leafNodes);
-            tbb::parallel_reduce(tbb::blocked_range<size_t>(0, internalNodes.size()), op);
+            tbb::parallel_reduce(std::pair<size_t, size_t>(0, internalNodes.size()), op);
         }
 
         ProcessLeafNodes op(leafNodes, *mRhsTree, *mSegment);
-        tbb::parallel_reduce(tbb::blocked_range<size_t>(0, leafNodes.size()), op);
+        tbb::parallel_reduce(std::pair<size_t, size_t>(0, leafNodes.size()), op);
     }
 
     TreePtrType& segment() { return mSegment; }
@@ -241,7 +243,7 @@ private:
                 other.mOutputLeafNodes->begin(), other.mOutputLeafNodes->end());
         }
 
-        void operator()(const tbb::blocked_range<size_t>& range)
+        void operator()(const std::pair<size_t, size_t>& range)
         {
             tree::ValueAccessor<const TreeType> rhsAcc(*mRhsTree);
             tree::ValueAccessor<TreeType>       outputAcc(*mOutputTree);
@@ -307,7 +309,7 @@ private:
 
         void join(ProcessLeafNodes& rhs) { mOutputTree->merge(*rhs.mOutputTree); }
 
-        void operator()(const tbb::blocked_range<size_t>& range)
+        void operator()(const std::pair<size_t, size_t>& range)
         {
             tree::ValueAccessor<const TreeType> rhsAcc(*mRhsTree);
             tree::ValueAccessor<TreeType>       outputAcc(*mOutputTree);
@@ -405,11 +407,11 @@ struct BuildSecondarySegment
             mRhsTree->getNodes(internalNodes);
 
             ProcessInternalNodes op(internalNodes, *mLhsTree, *mSegment, leafNodes);
-            tbb::parallel_reduce(tbb::blocked_range<size_t>(0, internalNodes.size()), op);
+            tbb::parallel_reduce(std::pair<size_t, size_t>(0, internalNodes.size()), op);
         }
 
         ProcessLeafNodes op(leafNodes, *mLhsTree, *mSegment);
-        tbb::parallel_reduce(tbb::blocked_range<size_t>(0, leafNodes.size()), op);
+        tbb::parallel_reduce(std::pair<size_t, size_t>(0, leafNodes.size()), op);
     }
 
     TreePtrType& segment() { return mSegment; }
@@ -446,7 +448,7 @@ private:
                 other.mOutputLeafNodes->begin(), other.mOutputLeafNodes->end());
         }
 
-        void operator()(const tbb::blocked_range<size_t>& range)
+        void operator()(const std::pair<size_t, size_t>& range)
         {
             tree::ValueAccessor<const TreeType> lhsAcc(*mLhsTree);
             tree::ValueAccessor<TreeType>       outputAcc(*mOutputTree);
@@ -522,7 +524,7 @@ private:
 
         void join(ProcessLeafNodes& rhs) { mOutputTree->merge(*rhs.mOutputTree); }
 
-        void operator()(const tbb::blocked_range<size_t>& range)
+        void operator()(const std::pair<size_t, size_t>& range)
         {
             tree::ValueAccessor<const TreeType> lhsAcc(*mLhsTree);
             tree::ValueAccessor<TreeType>       outputAcc(*mOutputTree);
@@ -663,7 +665,7 @@ doCompActiveLeafVoxels(TreeT &srcTree, TreeT &dstTree, OpT op)
     LeafPairList<LeafT> overlapping;//dst, src
     transferLeafNodes(srcTree, dstTree, overlapping);
 
-    using RangeT = tbb::blocked_range<size_t>;
+    using RangeT = std::pair<size_t, size_t>;
     tbb::parallel_for(RangeT(0, overlapping.size()), [op, &overlapping](const RangeT& r) {
         for (auto i = r.begin(); i != r.end(); ++i) {
             auto *dstLeaf = overlapping[i].first, *srcLeaf = overlapping[i].second;
@@ -688,7 +690,7 @@ doCompActiveLeafVoxels(TreeT &srcTree, TreeT &dstTree, OpT)
     LeafPairList<LeafT> overlapping;//dst, src
     transferLeafNodes(srcTree, dstTree, overlapping);
 
-    using RangeT = tbb::blocked_range<size_t>;
+    using RangeT = std::pair<size_t, size_t>;
     tbb::parallel_for(RangeT(0, overlapping.size()), [&overlapping](const RangeT& r) {
         for (auto i = r.begin(); i != r.end(); ++i) {
             overlapping[i].first->getValueMask() |= overlapping[i].second->getValueMask();
@@ -709,7 +711,7 @@ doCompActiveLeafVoxels(TreeT &srcTree, TreeT &dstTree, OpT op)
     LeafPairList<LeafT> overlapping;//dst, src
     transferLeafNodes(srcTree, dstTree, overlapping);
 
-    using RangeT = tbb::blocked_range<size_t>;
+    using RangeT = std::pair<size_t, size_t>;
     using WordT = typename LeafT::Buffer::WordType;
     tbb::parallel_for(RangeT(0, overlapping.size()), [op, &overlapping](const RangeT& r) {
         for (auto i = r.begin(); i != r.end(); ++i) {

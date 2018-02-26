@@ -44,8 +44,12 @@
 #include <openvdb/math/Stencils.h>
 #include <openvdb/math/Operators.h>
 #include <openvdb/tree/LeafManager.h>
+
+#ifdef OPENVDB_USE_TBB
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_reduce.h>
+#endif
+
 #include <cmath> // for std::isnan(), std::isfinite()
 #include <set>
 #include <sstream>
@@ -1138,7 +1142,7 @@ public:
     void getInactiveValues(SetType&) const;
 
     inline InactiveVoxelValues(const InactiveVoxelValues<TreeType>&, tbb::split);
-    inline void operator()(const tbb::blocked_range<size_t>&);
+    inline void operator()(const std::pair<size_t, size_t>&);
     inline void join(const InactiveVoxelValues<TreeType>&);
 
 private:
@@ -1183,7 +1187,7 @@ InactiveVoxelValues<TreeType>::runSerial()
 
 template<typename TreeType>
 inline void
-InactiveVoxelValues<TreeType>::operator()(const tbb::blocked_range<size_t>& range)
+InactiveVoxelValues<TreeType>::operator()(const std::pair<size_t, size_t>& range)
 {
     typename TreeType::LeafNodeType::ValueOffCIter iter;
 

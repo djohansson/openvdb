@@ -47,10 +47,13 @@
 #include <cassert>
 #include <iostream>
 #include <algorithm>// std::swap
+
+#ifdef OPENVDB_USE_TBB
 #include <tbb/atomic.h>
 #include <tbb/spin_mutex.h>
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_sort.h>
+#endif
 
 namespace openvdb {
 OPENVDB_USE_VERSION_NAMESPACE
@@ -94,8 +97,8 @@ namespace util {
 /// @code
 ///   PagedArray<size_t> array;
 ///   tbb::parallel_for(
-///       tbb::blocked_range<size_t>(0, 10000, array.pageSize()),
-///       [&array](const tbb::blocked_range<size_t>& range) {
+///       std::pair<size_t, size_t>(0, 10000, array.pageSize()),
+///       [&array](const std::pair<size_t, size_t>& range) {
 ///           for (size_t i=range.begin(); i!=range.end(); ++i) array.push_back(i);
 ///       }
 ///   );
@@ -126,8 +129,8 @@ namespace util {
 /// @code
 ///   PagedArray<size_t> array;
 ///   tbb::parallel_for(
-///       tbb::blocked_range<size_t>(0, 10000, array.pageSize()),
-///       [&array](const tbb::blocked_range<size_t>& range) {
+///       std::pair<size_t, size_t>(0, 10000, array.pageSize()),
+///       [&array](const std::pair<size_t, size_t>& range) {
 ///           PagedArray<size_t>::ValueBuffer buffer(array);
 ///           for (size_t i=range.begin(); i!=range.end(); ++i) buffer.push_back(i);
 ///       }
@@ -141,8 +144,8 @@ namespace util {
 ///   tbb::enumerable_thread_specific<PagedArray<size_t>::ValueBuffer>
 ///       pool(exemplar);//thread local storage pool of ValueBuffers
 ///   tbb::parallel_for(
-///       tbb::blocked_range<size_t>(0, 10000, array.pageSize()),
-///       [&pool](const tbb::blocked_range<size_t>& range) {
+///       std::pair<size_t, size_t>(0, 10000, array.pageSize()),
+///       [&pool](const std::pair<size_t, size_t>& range) {
 ///           PagedArray<size_t>::ValueBuffer &buffer = pool.local();
 ///           for (size_t i=range.begin(); i!=range.end(); ++i) buffer.push_back(i);
 ///       }
@@ -298,10 +301,10 @@ public:
     /// @note Multi-threaded
     void fill(const ValueType& v)
     {
-        auto op = [&](const tbb::blocked_range<size_t>& r){
+        auto op = [&](const std::pair<size_t, size_t>& r){
             for(size_t i=r.begin(); i!=r.end(); ++i) mPageTable[i]->fill(v);
         };
-        tbb::parallel_for(tbb::blocked_range<size_t>(0, this->pageCount()), op);
+        tbb::parallel_for(std::pair<size_t, size_t>(0, this->pageCount()), op);
     }
 
     /// @brief Copy the first @a count values in this PageArray into
@@ -315,16 +318,16 @@ public:
     {
         size_t last_page = count >> Log2PageSize;
         if (last_page >= this->pageCount()) return false;
-        auto op = [&](const tbb::blocked_range<size_t>& r){
+        auto op = [&](const std::pair<size_t, size_t>& r){
             for (size_t i=r.begin(); i!=r.end(); ++i) {
                 mPageTable[i]->copy(p+i*Page::Size, Page::Size);
             }
         };
         if (size_t m = count & Page::Mask) {//count is not divisible by page size
-            tbb::parallel_for(tbb::blocked_range<size_t>(0, last_page, 32), op);
+            tbb::parallel_for(std::pair<size_t, size_t>(0, last_page, 32), op);
             mPageTable[last_page]->copy(p+last_page*Page::Size, m);
         } else {
-            tbb::parallel_for(tbb::blocked_range<size_t>(0, last_page+1, 32), op);
+            tbb::parallel_for(std::pair<size_t, size_t>(0, last_page+1, 32), op);
         }
         return true;
     }
@@ -490,7 +493,7 @@ private:
 
     void grow(size_t index)
     {
-        tbb::spin_mutex::scoped_lock lock(mGrowthMutex);
+        std::lock_guard<std::mutex> lock(mGrowthMutex);
         while(index >= mCapacity) {
             mPageTable.push_back( new Page() );
             mCapacity += Page::Size;
@@ -502,7 +505,7 @@ private:
     void add_partially_full(Page*& page, size_t size);
 
     void add(Page*& page, size_t size) {
-        tbb::spin_mutex::scoped_lock lock(mGrowthMutex);
+        std::lock_guard<std::mutex> lock(mGrowthMutex);
         if (size == Page::Size) {//page is full
             this->add_full(page, size);
         } else if (size>0) {//page is only partially full
@@ -510,9 +513,9 @@ private:
         }
     }
     PageTableT mPageTable;//holds points to allocated pages
-    tbb::atomic<size_t> mSize{0};// current number of elements in array
+    std::atomic<size_t> mSize{0};// current number of elements in array
     size_t mCapacity = 0;//capacity of array given the current page count
-    tbb::spin_mutex mGrowthMutex;//Mutex-lock required to grow pages
+    std::mutex mGrowthMutex;//Mutex-lock required to grow pages
 }; // Public class PagedArray
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -521,7 +524,7 @@ template <typename ValueT, size_t Log2PageSize, template<typename ...> class Tab
 void PagedArray<ValueT, Log2PageSize, TableT>::shrink_to_fit()
 {
     if (mPageTable.size() > (mSize >> Log2PageSize) + 1) {
-        tbb::spin_mutex::scoped_lock lock(mGrowthMutex);
+        std::lock_guard<std::mutex> lock(mGrowthMutex);
         const size_t pageCount = (mSize >> Log2PageSize) + 1;
         if (mPageTable.size() > pageCount) {
             delete mPageTable.back();
@@ -535,7 +538,7 @@ template <typename ValueT, size_t Log2PageSize, template<typename ...> class Tab
 void PagedArray<ValueT, Log2PageSize,TableT >::merge(PagedArray& other)
 {
     if (&other != this && !other.isEmpty()) {
-        tbb::spin_mutex::scoped_lock lock(mGrowthMutex);
+        std::lock_guard<std::mutex> lock(mGrowthMutex);
         // extract last partially full page if it exists
         Page* page = nullptr;
         const size_t size = mSize & Page::Mask; //number of elements in the last page

@@ -50,7 +50,9 @@
 #include "PointDataGrid.h"
 #include "PointGroup.h"
 
+#ifdef OPENVDB_USE_TBB
 #include <tbb/parallel_reduce.h>
+#endif
 
 #include <type_traits>
 
@@ -750,7 +752,7 @@ struct CalculatePositionBounds
         , mMin(std::numeric_limits<Real>::max())
         , mMax(-std::numeric_limits<Real>::max()) {}
 
-    void operator()(const tbb::blocked_range<size_t>& range) {
+    void operator()(const std::pair<size_t, size_t>& range) {
         Vec3R pos;
         for (size_t n = range.begin(), N = range.end(); n != N; ++n) {
             mPositions.getPos(n, pos);
@@ -1092,7 +1094,7 @@ computeVoxelSize(  const PositionWrapper& positions,
     math::Mat4d inverseTransform = transform.inverse();
     inverseTransform = math::unit(inverseTransform);
 
-    tbb::blocked_range<size_t> range(0, numPoints);
+    std::pair<size_t, size_t> range(0, numPoints);
     CalculatePositionBounds<PositionWrapper> calculateBounds(positions, inverseTransform);
     tbb::parallel_reduce(range, calculateBounds);
 

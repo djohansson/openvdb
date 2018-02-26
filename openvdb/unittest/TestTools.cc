@@ -53,7 +53,11 @@
 #include <openvdb/math/Stats.h>
 #include "util.h" // for unittest_util::makeSphere()
 #include <cppunit/extensions/HelperMacros.h>
+
+#ifdef OPENVDB_USE_TBB
 #include <tbb/atomic.h>
+#endif
+
 #include <algorithm> // for std::sort
 #include <random>
 #include <sstream>
@@ -2589,7 +2593,7 @@ struct FloatToVec
         }
     }
 
-    tbb::atomic<int> numTiles;
+    std::atomic<int> numTiles;
 };
 
 }

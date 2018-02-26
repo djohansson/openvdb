@@ -39,12 +39,14 @@
 #include <openvdb/points/PointDataGrid.h>
 #include <openvdb/points/PointCount.h>
 #include <openvdb/version.h> // for OPENVDB_LIBRARY_MAJOR_VERSION, etc.
-#include <tbb/atomic.h>
-#include <tbb/mutex.h>
+
+
+#include <atomic>
 #include <cmath> // for fabs()
 #include <iomanip> // for std::setprecision()
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <sstream>
 #include <vector>
 #include <limits>
@@ -148,7 +150,7 @@ private:
     void doView();
     static void* doViewTask(void* arg);
 
-    tbb::atomic<bool> mRedisplay;
+    std::atomic<bool> mRedisplay;
     bool mClose, mHasThread;
     boost::thread mThread;
     openvdb::GridCPtrVec mGrids;

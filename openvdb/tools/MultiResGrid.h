@@ -66,9 +66,11 @@
 #include "SignedFloodFill.h"
 #include "ValueTransformer.h"
 
+#ifdef OPENVDB_USE_TBB
 #include <tbb/blocked_range.h>
 #include <tbb/enumerable_thread_specific.h>
 #include <tbb/parallel_for.h>
+#endif
 
 #include <iostream>
 #include <sstream>

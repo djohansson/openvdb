@@ -54,9 +54,12 @@
 #include <openvdb/tree/LeafNode.h>
 #include <openvdb/tree/Tree.h>
 
-#include <tbb/atomic.h>
+#ifdef OPENVDB_USE_TBB
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
+#endif
+
+#include <atomic>
 #include <algorithm> // for std::min(), std::max()
 #include <cmath> // for std::sqrt()
 #include <deque>
@@ -370,7 +373,7 @@ namespace point_index_grid_internal {
 template<typename PointArrayT>
 struct ValidPartitioningOp
 {
-    ValidPartitioningOp(tbb::atomic<bool>& hasChanged,
+    ValidPartitioningOp(std::atomic<bool>& hasChanged,
         const PointArrayT& points, const math::Transform& xform)
         : mPoints(&points)
         , mTransform(&xform)
@@ -421,7 +424,7 @@ struct ValidPartitioningOp
 private:
     PointArrayT         const * const mPoints;
     math::Transform     const * const mTransform;
-    tbb::atomic<bool>         * const mHasChanged;
+    std::atomic<bool>         * const mHasChanged;
 };
 
 
@@ -438,7 +441,7 @@ struct PopulateLeafNodesOp
     {
     }
 
-    void operator()(const tbb::blocked_range<size_t>& range) const {
+    void operator()(const std::pair<size_t, size_t>& range) const {
 
         using VoxelOffsetT = typename Partitioner::VoxelOffsetType;
 
@@ -536,7 +539,7 @@ constructPointTree(TreeType& tree, const math::Transform& xform, const PointArra
         leafNodeCount = partitioner.size();
         leafNodes.reset(new LeafType*[leafNodeCount]);
 
-        const tbb::blocked_range<size_t> range(0, leafNodeCount);
+        const std::pair<size_t, size_t> range(0, leafNodeCount);
         tbb::parallel_for(range, PopulateLeafNodesOp<LeafType>(leafNodes, partitioner));
     }
 
@@ -1338,7 +1341,7 @@ isValidPartition(const PointArrayT& points, const GridT& grid)
         return false;
     }
 
-    tbb::atomic<bool> changed;
+    std::atomic<bool> changed;
     changed = false;
 
     point_index_grid_internal::ValidPartitioningOp<PointArrayT>

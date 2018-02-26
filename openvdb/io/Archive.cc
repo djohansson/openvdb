@@ -54,7 +54,7 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
-#include <tbb/atomic.h>
+#include <atomic>
 
 #ifdef _MSC_VER
 #include <boost/interprocess/detail/os_file_functions.hpp> // open_existing_file(), close_file()
@@ -448,7 +448,7 @@ public:
     boost::interprocess::mapped_region mRegion;
     bool mAutoDelete;
     Notifier mNotifier;
-    mutable tbb::atomic<Index64> mLastWriteTime;
+	mutable std::atomic<Index64> mLastWriteTime;
 
 private:
     Impl(const Impl&); // not copyable

@@ -36,7 +36,11 @@
 
 #include <sstream>
 #include <iostream>
+
+#ifdef OPENVDB_USE_TBB
 #include <tbb/tick_count.h>
+#endif
+
 #include <iomanip>//for setprecision
 
 using namespace openvdb;

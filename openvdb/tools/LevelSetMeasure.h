@@ -43,8 +43,12 @@
 #include <openvdb/math/FiniteDifference.h>
 #include <openvdb/math/Operators.h>
 #include <openvdb/util/NullInterrupter.h>
+
+#ifdef OPENVDB_USE_TBB
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_sort.h>
+#endif
+
 #include <type_traits>
 
 

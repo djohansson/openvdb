@@ -73,10 +73,13 @@
 #ifndef OPENVDB_TOOLS_POINTSTOMASK_HAS_BEEN_INCLUDED
 #define OPENVDB_TOOLS_POINTSTOMASK_HAS_BEEN_INCLUDED
 
+#ifdef OPENVDB_USE_TBB
 #include <tbb/enumerable_thread_specific.h>
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_reduce.h>
 #include <tbb/blocked_range.h>
+#endif
+
 #include <openvdb/openvdb.h> // for MaskGrid
 #include <openvdb/Grid.h>
 #include <openvdb/Types.h>
@@ -213,9 +216,9 @@ struct PointsToMask<GridT, InterrupterT>::AddPoints
         , mParent(&parent)
         , mPool(&pool)
     {
-        tbb::parallel_for(tbb::blocked_range<size_t>(0, mPoints->size(), grainSize), *this);
+        tbb::parallel_for(std::pair<size_t, size_t>(0, mPoints->size(), grainSize), *this);
     }
-    void operator()(const tbb::blocked_range<size_t>& range) const
+    void operator()(const std::pair<size_t, size_t>& range) const
     {
         if (mParent->interrupt()) return;
         GridT& grid = mPool->local();

@@ -29,7 +29,7 @@
 ///////////////////////////////////////////////////////////////////////////
 
 #include "Maps.h"
-#include <tbb/mutex.h>
+#include <mutex>
 
 namespace openvdb {
 OPENVDB_USE_VERSION_NAMESPACE
@@ -38,8 +38,8 @@ namespace math {
 
 namespace {
 
-using Mutex = tbb::mutex;
-using Lock = Mutex::scoped_lock;
+using Mutex = std::mutex;
+using Lock = std::lock_guard<Mutex>;
 
 // Declare this at file scope to ensure thread-safe initialization.
 // NOTE: Do *NOT* move this into Maps.h or else we will need to pull in

@@ -98,8 +98,11 @@
 #ifndef OPENVDB_TOOLS_PARTICLES_TO_LEVELSET_HAS_BEEN_INCLUDED
 #define OPENVDB_TOOLS_PARTICLES_TO_LEVELSET_HAS_BEEN_INCLUDED
 
+#ifdef OPENVDB_USE_TBB
 #include <tbb/parallel_reduce.h>
 #include <tbb/blocked_range.h>
+#endif
+
 #include <openvdb/Types.h>
 #include <openvdb/Grid.h>
 #include <openvdb/math/Math.h>
@@ -524,7 +527,7 @@ struct ParticlesToLevelSet<SdfGridT, AttributeT, InterrupterT>::Raster
     }
 
     /// @brief Kicks off the optionally multithreaded computation
-    void operator()(const tbb::blocked_range<size_t>& r)
+    void operator()(const std::pair<size_t, size_t>& r)
     {
         assert(mTask);
         mTask(this, r);
@@ -560,7 +563,7 @@ private:
     /// rasterization of particles as spheres with variable radius
     ///
     /// @param r tbb's default range referring to the list of particles
-    void rasterSpheres(const tbb::blocked_range<size_t>& r)
+    void rasterSpheres(const std::pair<size_t, size_t>& r)
     {
         AccessorT acc = mGrid->getAccessor(); // local accessor
         bool run = true;
@@ -589,7 +592,7 @@ private:
     /// rasterization of particles as spheres with a fixed radius
     ///
     /// @param r tbb's default range referring to the list of particles
-    void rasterFixedSpheres(const tbb::blocked_range<size_t>& r, SdfT R)
+    void rasterFixedSpheres(const std::pair<size_t, size_t>& r, SdfT R)
     {
         const SdfT
             dx = static_cast<SdfT>(mParent.mDx),
@@ -647,7 +650,7 @@ private:
     /// rasterization of particles as spheres with velocity blurring
     ///
     /// @param r tbb's default range referring to the list of particles
-    void rasterTrails(const tbb::blocked_range<size_t>& r, SdfT delta)
+    void rasterTrails(const std::pair<size_t, size_t>& r, SdfT delta)
     {
         AccessorT acc = mGrid->getAccessor(); // local accessor
         bool run = true;
@@ -690,9 +693,9 @@ private:
 
         if (mParent.mGrainSize>0) {
             tbb::parallel_reduce(
-              tbb::blocked_range<size_t>(0, bucketCount, mParent.mGrainSize), *this);
+              std::pair<size_t, size_t>(0, bucketCount, mParent.mGrainSize), *this);
         } else {
-            (*this)(tbb::blocked_range<size_t>(0, bucketCount));
+            (*this)(std::pair<size_t, size_t>(0, bucketCount));
         }
     }
 
@@ -748,7 +751,7 @@ private:
         }//end loop over x
         return true;
     }
-    using FuncType = typename std::function<void (Raster*, const tbb::blocked_range<size_t>&)>;
+    using FuncType = typename std::function<void (Raster*, const std::pair<size_t, size_t>&)>;
 
     template<typename DisableType>
     typename std::enable_if<DisableType::value>::type

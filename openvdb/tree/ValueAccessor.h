@@ -58,13 +58,12 @@
 #ifndef OPENVDB_TREE_VALUEACCESSOR_HAS_BEEN_INCLUDED
 #define OPENVDB_TREE_VALUEACCESSOR_HAS_BEEN_INCLUDED
 
-#include <tbb/null_mutex.h>
-#include <tbb/spin_mutex.h>
 #include <openvdb/version.h>
 #include <openvdb/Types.h>
 #include <openvdb/external/brigand.hpp>
 #include <cassert>
 #include <limits>
+#include <mutex>
 #include <type_traits>
 
 namespace openvdb {
@@ -206,7 +205,8 @@ protected:
 template<typename _TreeType,
          bool IsSafe = true,
          Index CacheLevels = _TreeType::DEPTH-1,
-         typename MutexType = tbb::null_mutex>
+         typename MutexType = std::mutex,
+		 typename LockT = std::lock_guard<MutexType>>
 class ValueAccessor: public ValueAccessorBase<_TreeType, IsSafe>
 {
 public:
@@ -217,7 +217,6 @@ public:
     using LeafNodeT = typename TreeType::LeafNodeType;
     using ValueType = typename RootNodeT::ValueType;
     using BaseT = ValueAccessorBase<TreeType, IsSafe>;
-    using LockT = typename MutexType::scoped_lock;
     using BaseT::IsConstTree;
 
     ValueAccessor(TreeType& tree): BaseT(tree), mCache(*this)
@@ -472,11 +471,18 @@ private:
 }; // class ValueAccessor
 
 
+struct null_mutex
+{
+	void lock() {}
+	void unlock() noexcept {}
+	bool try_lock() { return true; }
+};
+
 /// @brief Template specialization of the ValueAccessor with no mutex and no cache levels
 /// @details This specialization is provided mainly for benchmarking.
 /// Accessors with caching will almost always be faster.
 template<typename TreeType, bool IsSafe>
-class ValueAccessor<TreeType, IsSafe, 0, tbb::null_mutex>
+class ValueAccessor<TreeType, IsSafe, 0, null_mutex>
     : public ValueAccessor0<TreeType, IsSafe>
 {
 public:
@@ -488,7 +494,7 @@ public:
 
 /// Template specialization of the ValueAccessor with no mutex and one cache level
 template<typename TreeType, bool IsSafe>
-class ValueAccessor<TreeType, IsSafe, 1, tbb::null_mutex>
+class ValueAccessor<TreeType, IsSafe, 1, null_mutex>
     : public ValueAccessor1<TreeType, IsSafe>
 {
 public:
@@ -500,7 +506,7 @@ public:
 
 /// Template specialization of the ValueAccessor with no mutex and two cache levels
 template<typename TreeType, bool IsSafe>
-class ValueAccessor<TreeType, IsSafe, 2, tbb::null_mutex>
+class ValueAccessor<TreeType, IsSafe, 2, null_mutex>
     : public ValueAccessor2<TreeType, IsSafe>
 {
 public:
@@ -512,7 +518,7 @@ public:
 
 /// Template specialization of the ValueAccessor with no mutex and three cache levels
 template<typename TreeType, bool IsSafe>
-class ValueAccessor<TreeType, IsSafe, 3, tbb::null_mutex>: public ValueAccessor3<TreeType, IsSafe>
+class ValueAccessor<TreeType, IsSafe, 3, null_mutex>: public ValueAccessor3<TreeType, IsSafe>
 {
 public:
     ValueAccessor(TreeType& tree): ValueAccessor3<TreeType, IsSafe>(tree) {}
@@ -534,11 +540,11 @@ public:
 /// is recommended that, instead, each thread be assigned its own
 /// (non-mutex protected) accessor.
 template<typename TreeType, bool IsSafe = true>
-class ValueAccessorRW: public ValueAccessor<TreeType, IsSafe, TreeType::DEPTH-1, tbb::spin_mutex>
+class ValueAccessorRW: public ValueAccessor<TreeType, IsSafe, TreeType::DEPTH-1, std::mutex>
 {
 public:
     ValueAccessorRW(TreeType& tree)
-        : ValueAccessor<TreeType, IsSafe, TreeType::DEPTH-1, tbb::spin_mutex>(tree)
+        : ValueAccessor<TreeType, IsSafe, TreeType::DEPTH-1, std::mutex>(tree)
     {
     }
 };
