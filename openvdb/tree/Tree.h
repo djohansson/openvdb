@@ -1539,11 +1539,14 @@ template<typename RootNodeType>
 inline void
 Tree<RootNodeType>::attachAccessor(ValueAccessorBase<Tree, true>& accessor) const
 {
+#ifdef OPENVDB_USE_TBB
     typename AccessorRegistry::accessor a;
-#ifndef OPENVDB_USE_TBB
-	std::lock_guard<AccessorRegistryMutex> lock(mAccessorRegistryMutex);
-#endif
     mAccessorRegistry.insert(a, &accessor);
+#else
+	std::lock_guard<AccessorRegistryMutex> lock(mAccessorRegistryMutex);
+	mAccessorRegistry.insert(&accessor);
+#endif
+
 }
 
 
@@ -1551,11 +1554,13 @@ template<typename RootNodeType>
 inline void
 Tree<RootNodeType>::attachAccessor(ValueAccessorBase<const Tree, true>& accessor) const
 {
+#ifdef OPENVDB_USE_TBB
     typename ConstAccessorRegistry::accessor a;
-#ifndef OPENVDB_USE_TBB
-	std::lock_guard<ConstAccessorRegistryMutex> lock(mConstAccessorRegistryMutex);
-#endif
     mConstAccessorRegistry.insert(a, &accessor);
+#else
+	std::lock_guard<ConstAccessorRegistryMutex> lock(mConstAccessorRegistryMutex);
+	mConstAccessorRegistry.insert(&accessor);
+#endif
 }
 
 
