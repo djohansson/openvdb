@@ -55,7 +55,7 @@
 #include <iostream>
 #include <mutex>
 #include <sstream>
-#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 
@@ -1226,9 +1226,9 @@ protected:
     using AccessorRegistry = tbb::concurrent_hash_map<ValueAccessorBase<Tree, true>*, bool>;
     using ConstAccessorRegistry = tbb::concurrent_hash_map<ValueAccessorBase<const Tree, true>*, bool>;
 #else
-	using AccessorRegistry = std::unordered_map<ValueAccessorBase<Tree, true>*, bool>;
+	using AccessorRegistry = std::unordered_set<ValueAccessorBase<Tree, true>*>;
 	using AccessorRegistryMutex = std::mutex;
-	using ConstAccessorRegistry = std::unordered_map<ValueAccessorBase<const Tree, true>*, bool>;
+	using ConstAccessorRegistry = std::unordered_set<ValueAccessorBase<const Tree, true>*>;
 	using ConstAccessorRegistryMutex = std::mutex;
 #endif
 
@@ -1241,8 +1241,8 @@ protected:
     struct DeallocateNodes {
         DeallocateNodes(std::vector<NodeType*>& nodes)
             : mNodes(nodes.empty() ? nullptr : &nodes.front()) { }
-        void operator()(const std::pair<size_t, size_t>& range) const {
-            for (size_t n = range.first, N = range.second; n < N; ++n) {
+        void operator()(const BlockedRange<size_t>& range) const {
+            for (size_t n = range.begin(), N = range.end(); n < N; ++n) {
                 delete mNodes[n]; mNodes[n] = nullptr;
             }
         }
@@ -1507,24 +1507,16 @@ Tree<RootNodeType>::clear()
     std::vector<LeafNodeType*> leafnodes;
     this->stealNodes(leafnodes);
 
-#ifdef OPENVDB_USE_TBB
-    tbb::parallel_for(std::pair<size_t, size_t>(0, leafnodes.size()),
-        DeallocateNodes<LeafNodeType>(leafnodes));
-#else
-	(DeallocateNodes<LeafNodeType>(leafnodes))(
-		std::pair<size_t, size_t>(0, leafnodes.size()));
-#endif
+	OPENVDB_FOR_EACH(
+		DeallocateNodes<LeafNodeType>(leafnodes),
+		(BlockedRange<size_t>(0, leafnodes.size())));
 
     std::vector<typename RootNodeType::ChildNodeType*> internalNodes;
     this->stealNodes(internalNodes);
 
-#ifdef OPENVDB_USE_TBB
-    tbb::parallel_for(std::pair<size_t, size_t>(0, internalNodes.size()),
-        DeallocateNodes<typename RootNodeType::ChildNodeType>(internalNodes));
-#else
-	(DeallocateNodes<typename RootNodeType::ChildNodeType>(internalNodes))(
-		std::pair<size_t, size_t>(0, internalNodes.size()));
-#endif
+	OPENVDB_FOR_EACH(
+		DeallocateNodes<typename RootNodeType::ChildNodeType>(internalNodes),
+		(BlockedRange<size_t>(0, internalNodes.size())));
 
     mRoot.clear();
 
@@ -1597,7 +1589,11 @@ Tree<RootNodeType>::clearAllAccessors()
 		for (typename AccessorRegistry::iterator it = mAccessorRegistry.begin();
 			it != mAccessorRegistry.end(); ++it)
 		{
+#ifdef OPENVDB_USE_TBB
 			if (it->first) it->first->clear();
+#else
+			if (*it) (*it)->clear();
+#endif
 		}
 	}
 
@@ -1608,7 +1604,11 @@ Tree<RootNodeType>::clearAllAccessors()
 		for (typename ConstAccessorRegistry::iterator it = mConstAccessorRegistry.begin();
 			it != mConstAccessorRegistry.end(); ++it)
 		{
+#ifdef OPENVDB_USE_TBB
 			if (it->first) it->first->clear();
+#else
+			if (*it) (*it)->clear();
+#endif
 		}
 	}
 }
@@ -1626,7 +1626,11 @@ Tree<RootNodeType>::releaseAllAccessors()
 		for (typename AccessorRegistry::iterator it = mAccessorRegistry.begin();
 			it != mAccessorRegistry.end(); ++it)
 		{
-			it->first->release();
+#ifdef OPENVDB_USE_TBB
+			if (it->first) it->first->release();
+#else
+			if (*it) (*it)->release();
+#endif
 		}
 		mAccessorRegistry.clear();
 	}
@@ -1639,7 +1643,11 @@ Tree<RootNodeType>::releaseAllAccessors()
 		for (typename ConstAccessorRegistry::iterator it = mConstAccessorRegistry.begin();
 			it != mConstAccessorRegistry.end(); ++it)
 		{
-			it->first->release();
+#ifdef OPENVDB_USE_TBB
+			if (it->first) it->first->release();
+#else
+			if (*it) (*it)->release();
+#endif
 		}
 		mConstAccessorRegistry.clear();
 	}

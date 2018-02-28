@@ -43,11 +43,8 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/tbb_thread.h> // for tbb::this_tbb_thread::sleep()
-#endif
-
 #include <algorithm> // for std::sort()
+#include <chrono>
 #include <cstdio> // for remove() and rename()
 #include <fstream>
 #include <functional> // for std::bind()
@@ -57,6 +54,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 #include <sys/types.h> // for stat()
 #include <sys/stat.h>
@@ -2376,6 +2374,10 @@ TestFile::testAsync()
 {
     using namespace openvdb;
 
+	using namespace std::chrono_literals;
+	using hires_clock = std::chrono::high_resolution_clock;
+	using time_point = hires_clock::time_point;
+
     // Register types.
     openvdb::initialize();
 
@@ -2423,12 +2425,12 @@ TestFile::testAsync()
             helper.insert(id, filename);
         }
 
-        tbb::tick_count start = tbb::tick_count::now();
+		time_point start = hires_clock::now();
         while (!helper.ids.empty()) {
-            if ((tbb::tick_count::now() - start).seconds() > 60) break; // time out after 1 minute
+            if (std::chrono::duration_cast<std::chrono::seconds>(hires_clock::now() - start).count() > 60) break; // time out after 1 minute
 
-            // Wait one second for tasks to complete.
-            tbb::this_tbb_thread::sleep(tbb::tick_count::interval_t(1.0/*sec*/));
+			// Wait one second for tasks to complete.
+			std::this_thread::sleep_for(1s);
 
             // Poll each task in the pending map.
             std::set<io::Queue::Id> ids = helper.ids; // iterate over a copy
@@ -2458,7 +2460,7 @@ TestFile::testAsync()
             helper.insert(id, filename);
         }
         while (!queue.empty()) {
-            tbb::this_tbb_thread::sleep(tbb::tick_count::interval_t(1.0/*sec*/));
+			std::this_thread::sleep_for(1s);
         }
     }
     {
@@ -2483,7 +2485,7 @@ TestFile::testAsync()
         CPPUNIT_ASSERT_THROW(queue.write(grids, io::Stream(file2)), openvdb::RuntimeError);
 
         while (!queue.empty()) {
-            tbb::this_tbb_thread::sleep(tbb::tick_count::interval_t(1.0/*sec*/));
+			std::this_thread::sleep_for(1s);
         }
     }
 }

@@ -205,7 +205,7 @@ private:
         {
             const int n = mParent->getGrainSize();
             if (n>0) {
-                tbb::parallel_for(mParent->leafs().leafRange(n), *this);
+                OPENVDB_FOR_EACH(*this, mParent->leafs().leafRange(n));
             } else {
                 (*this)(mParent->leafs().leafRange());
             }

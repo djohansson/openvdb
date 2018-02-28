@@ -47,11 +47,7 @@
 #include "SignedFloodFill.h" // for signedFloodFill()
 
 #ifdef OPENVDB_USE_TBB
-#include <tbb/blocked_range.h>
-#include <tbb/parallel_for.h>
-#include <tbb/parallel_reduce.h>
 #include <tbb/task_group.h>
-#include <tbb/task_scheduler_init.h>
 #endif
 
 #include <type_traits>
@@ -202,11 +198,11 @@ struct BuildPrimarySegment
             mLhsTree->getNodes(internalNodes);
 
             ProcessInternalNodes op(internalNodes, *mRhsTree, *mSegment, leafNodes);
-            tbb::parallel_reduce(std::pair<size_t, size_t>(0, internalNodes.size()), op);
+            OPENVDB_REDUCE(op, BlockedRange<size_t>(0, internalNodes.size()));
         }
 
         ProcessLeafNodes op(leafNodes, *mRhsTree, *mSegment);
-        tbb::parallel_reduce(std::pair<size_t, size_t>(0, leafNodes.size()), op);
+		OPENVDB_REDUCE(op, BlockedRange<size_t>(0, leafNodes.size()));
     }
 
     TreePtrType& segment() { return mSegment; }
@@ -243,7 +239,7 @@ private:
                 other.mOutputLeafNodes->begin(), other.mOutputLeafNodes->end());
         }
 
-        void operator()(const std::pair<size_t, size_t>& range)
+        void operator()(const BlockedRange<size_t>& range)
         {
             tree::ValueAccessor<const TreeType> rhsAcc(*mRhsTree);
             tree::ValueAccessor<TreeType>       outputAcc(*mOutputTree);
@@ -309,7 +305,7 @@ private:
 
         void join(ProcessLeafNodes& rhs) { mOutputTree->merge(*rhs.mOutputTree); }
 
-        void operator()(const std::pair<size_t, size_t>& range)
+        void operator()(const BlockedRange<size_t>& range)
         {
             tree::ValueAccessor<const TreeType> rhsAcc(*mRhsTree);
             tree::ValueAccessor<TreeType>       outputAcc(*mOutputTree);
@@ -407,11 +403,11 @@ struct BuildSecondarySegment
             mRhsTree->getNodes(internalNodes);
 
             ProcessInternalNodes op(internalNodes, *mLhsTree, *mSegment, leafNodes);
-            tbb::parallel_reduce(std::pair<size_t, size_t>(0, internalNodes.size()), op);
+			OPENVDB_REDUCE(op, BlockedRange<size_t>(0, internalNodes.size()));
         }
 
         ProcessLeafNodes op(leafNodes, *mLhsTree, *mSegment);
-        tbb::parallel_reduce(std::pair<size_t, size_t>(0, leafNodes.size()), op);
+		OPENVDB_REDUCE(op, BlockedRange<size_t>(0, leafNodes.size()));
     }
 
     TreePtrType& segment() { return mSegment; }
@@ -448,7 +444,7 @@ private:
                 other.mOutputLeafNodes->begin(), other.mOutputLeafNodes->end());
         }
 
-        void operator()(const std::pair<size_t, size_t>& range)
+        void operator()(const BlockedRange<size_t>& range)
         {
             tree::ValueAccessor<const TreeType> lhsAcc(*mLhsTree);
             tree::ValueAccessor<TreeType>       outputAcc(*mOutputTree);
@@ -524,7 +520,7 @@ private:
 
         void join(ProcessLeafNodes& rhs) { mOutputTree->merge(*rhs.mOutputTree); }
 
-        void operator()(const std::pair<size_t, size_t>& range)
+        void operator()(const BlockedRange<size_t>& range)
         {
             tree::ValueAccessor<const TreeType> lhsAcc(*mLhsTree);
             tree::ValueAccessor<TreeType>       outputAcc(*mOutputTree);
@@ -665,16 +661,17 @@ doCompActiveLeafVoxels(TreeT &srcTree, TreeT &dstTree, OpT op)
     LeafPairList<LeafT> overlapping;//dst, src
     transferLeafNodes(srcTree, dstTree, overlapping);
 
-    using RangeT = std::pair<size_t, size_t>;
-    tbb::parallel_for(RangeT(0, overlapping.size()), [op, &overlapping](const RangeT& r) {
-        for (auto i = r.begin(); i != r.end(); ++i) {
-            auto *dstLeaf = overlapping[i].first, *srcLeaf = overlapping[i].second;
-            dstLeaf->getValueMask() |= srcLeaf->getValueMask();
-            auto *ptr = dstLeaf->buffer().data();
-            for (auto v = srcLeaf->cbeginValueOn(); v; ++v) op(ptr[v.pos()], *v);
-            delete srcLeaf;
-        }
-   });
+    using RangeT = BlockedRange<size_t>;
+	auto func = [op, &overlapping](const RangeT& r) {
+		for (auto i = r.begin(); i != r.end(); ++i) {
+			auto *dstLeaf = overlapping[i].first, *srcLeaf = overlapping[i].second;
+			dstLeaf->getValueMask() |= srcLeaf->getValueMask();
+			auto *ptr = dstLeaf->buffer().data();
+			for (auto v = srcLeaf->cbeginValueOn(); v; ++v) op(ptr[v.pos()], *v);
+			delete srcLeaf;
+		}
+	};
+	OPENVDB_FOR_EACH(func, RangeT(0, overlapping.size()));
 }
 /// @endcond
 
@@ -690,13 +687,14 @@ doCompActiveLeafVoxels(TreeT &srcTree, TreeT &dstTree, OpT)
     LeafPairList<LeafT> overlapping;//dst, src
     transferLeafNodes(srcTree, dstTree, overlapping);
 
-    using RangeT = std::pair<size_t, size_t>;
-    tbb::parallel_for(RangeT(0, overlapping.size()), [&overlapping](const RangeT& r) {
-        for (auto i = r.begin(); i != r.end(); ++i) {
-            overlapping[i].first->getValueMask() |= overlapping[i].second->getValueMask();
-            delete overlapping[i].second;
-        }
-    });
+    using RangeT = BlockedRange<size_t>;
+	auto func = [&overlapping](const RangeT& r) {
+		for (auto i = r.begin(); i != r.end(); ++i) {
+			overlapping[i].first->getValueMask() |= overlapping[i].second->getValueMask();
+			delete overlapping[i].second;
+		}
+	};
+	OPENVDB_FOR_EACH(func, RangeT(0, overlapping.size()));
 }
 
 /// @cond COMPOSITE_INTERNAL
@@ -711,23 +709,24 @@ doCompActiveLeafVoxels(TreeT &srcTree, TreeT &dstTree, OpT op)
     LeafPairList<LeafT> overlapping;//dst, src
     transferLeafNodes(srcTree, dstTree, overlapping);
 
-    using RangeT = std::pair<size_t, size_t>;
+    using RangeT = BlockedRange<size_t>;
     using WordT = typename LeafT::Buffer::WordType;
-    tbb::parallel_for(RangeT(0, overlapping.size()), [op, &overlapping](const RangeT& r) {
-        for (auto i = r.begin(); i != r.end(); ++i) {
-            LeafT *dstLeaf = overlapping[i].first, *srcLeaf = overlapping[i].second;
-            WordT *w1 = dstLeaf->buffer().data();
-            const WordT *w2 = srcLeaf->buffer().data();
-            const WordT *w3 = &(srcLeaf->getValueMask().template getWord<WordT>(0));
-            for (Index32 n = LeafT::Buffer::WORD_COUNT; n--; ++w1) {
-                WordT tmp = *w1, state = *w3++;
-                op (tmp, *w2++);
-                *w1 = (state & tmp) | (~state & *w1);//inactive values are unchanged
-            }
-            dstLeaf->getValueMask() |= srcLeaf->getValueMask();
-            delete srcLeaf;
-        }
-    });
+	auto func = [op, &overlapping](const RangeT& r) {
+		for (auto i = r.begin(); i != r.end(); ++i) {
+			LeafT *dstLeaf = overlapping[i].first, *srcLeaf = overlapping[i].second;
+			WordT *w1 = dstLeaf->buffer().data();
+			const WordT *w2 = srcLeaf->buffer().data();
+			const WordT *w3 = &(srcLeaf->getValueMask().template getWord<WordT>(0));
+			for (Index32 n = LeafT::Buffer::WORD_COUNT; n--; ++w1) {
+				WordT tmp = *w1, state = *w3++;
+				op(tmp, *w2++);
+				*w1 = (state & tmp) | (~state & *w1);//inactive values are unchanged
+			}
+			dstLeaf->getValueMask() |= srcLeaf->getValueMask();
+			delete srcLeaf;
+		}
+	};
+	OPENVDB_FOR_EACH(func, RangeT(0, overlapping.size()));
 }
 /// @endcond
 

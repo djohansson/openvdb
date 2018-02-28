@@ -41,10 +41,6 @@
 #include <openvdb/util/logging.h>
 #include <openvdb/util/NullInterrupter.h>
 #include "Math.h" // for Abs(), isZero(), Max(), Sqrt()
-#ifdef OPENVDB_USE_TBB
-#include <tbb/parallel_for.h>
-#include <tbb/parallel_reduce.h>
-#endif
 #include <algorithm> // for std::lower_bound()
 #include <cassert>
 #include <cmath> // for std::isfinite()
@@ -61,7 +57,7 @@ namespace pcg {
 
 using SizeType = Index32;
 
-using SizeRange = std::pair<SizeType, SizeType>;
+using SizeRange = BlockedRange<SizeType>;
 
 template<typename ValueType> class Vector;
 
@@ -521,7 +517,7 @@ struct CopyOp
     CopyOp(const T* from_, T* to_): from(from_), to(to_) {}
 
     void operator()(const SizeRange& range) const {
-        for (SizeType n = range.first, N = range.second; n < N; ++n) to[n] = from[n];
+        for (SizeType n = range.begin(), N = range.end(); n < N; ++n) to[n] = from[n];
     }
 
     const T* from;
@@ -536,7 +532,7 @@ struct FillOp
     FillOp(T* data_, const T& val_): data(data_), val(val_) {}
 
     void operator()(const SizeRange& range) const {
-        for (SizeType n = range.first, N = range.second; n < N; ++n) data[n] = val;
+        for (SizeType n = range.begin(), N = range.end(); n < N; ++n) data[n] = val;
     }
 
     T* data;
@@ -552,11 +548,11 @@ struct LinearOp
 
     void operator()(const SizeRange& range) const {
         if (isExactlyEqual(a, T(1))) {
-            for (SizeType n = range.first, N = range.second; n < N; ++n) out[n] = x[n] + y[n];
+            for (SizeType n = range.begin(), N = range.end(); n < N; ++n) out[n] = x[n] + y[n];
         } else if (isExactlyEqual(a, T(-1))) {
-            for (SizeType n = range.first, N = range.second; n < N; ++n) out[n] = -x[n] + y[n];
+            for (SizeType n = range.begin(), N = range.end(); n < N; ++n) out[n] = -x[n] + y[n];
         } else {
-            for (SizeType n = range.first, N = range.second; n < N; ++n) out[n] = a * x[n] + y[n];
+            for (SizeType n = range.begin(), N = range.end(); n < N; ++n) out[n] = a * x[n] + y[n];
         }
     }
 
@@ -587,12 +583,7 @@ template<typename T>
 inline
 Vector<T>::Vector(const Vector& other): mData(new T[other.mSize]), mSize(other.mSize)
 {
-#ifdef OPENVDB_USE_TBB
-    tbb::parallel_for(SizeRange(0, mSize),
-        internal::CopyOp<T>(/*from=*/other.mData, /*to=*/mData));
-#else
-	(internal::CopyOp<T>(/*from=*/other.mData, /*to=*/mData))(SizeRange(0, mSize));
-#endif
+    OPENVDB_FOR_EACH(internal::CopyOp<T>(/*from=*/other.mData, /*to=*/mData), SizeRange(0, mSize));
 }
 
 
@@ -609,8 +600,7 @@ Vector<T>& Vector<T>::operator=(const Vector<T>& other)
     }
 
     // Deep copy the data
-    tbb::parallel_for(SizeRange(0, mSize),
-        internal::CopyOp<T>(/*from=*/other.mData, /*to=*/mData));
+	OPENVDB_FOR_EACH(internal::CopyOp<T>(/*from=*/other.mData, /*to=*/mData), SizeRange(0, mSize));
 
     return *this;
 }
@@ -632,7 +622,7 @@ template<typename T>
 inline void
 Vector<T>::fill(const ValueType& value)
 {
-    tbb::parallel_for(SizeRange(0, mSize), internal::FillOp<T>(mData, value));
+	OPENVDB_FOR_EACH(internal::FillOp<T>(mData, value), SizeRange(0, mSize));
 }
 
 
@@ -643,7 +633,7 @@ struct Vector<T>::ScaleOp
     ScaleOp(T* data_, const Scalar& s_): data(data_), s(s_) {}
 
     void operator()(const SizeRange& range) const {
-        for (SizeType n = range.first, N = range.second; n < N; ++n) data[n] *= s;
+        for (SizeType n = range.begin(), N = range.end(); n < N; ++n) data[n] *= s;
     }
 
     T* data;
@@ -656,7 +646,7 @@ template<typename Scalar>
 inline void
 Vector<T>::scale(const Scalar& s)
 {
-    tbb::parallel_for(SizeRange(0, mSize), ScaleOp<Scalar>(mData, s));
+	OPENVDB_FOR_EACH(ScaleOp<Scalar>(mData, s), SizeRange(0, mSize));
 }
 
 
@@ -672,7 +662,7 @@ struct Vector<T>::DeterministicDotProductOp
         const SizeType binSize = arraySize / binCount;
 
         // Iterate over bins (array segments)
-        for (SizeType n = range.first, N = range.second; n < N; ++n) {
+        for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
             const SizeType begin = n * binSize;
             const SizeType end = (n == binCount-1) ? arraySize : begin + binSize;
 
@@ -722,8 +712,9 @@ Vector<T>::dot(const Vector<T>& other) const
         const SizeType binCount = 100;
         T partialSums[100];
 
-        tbb::parallel_for(SizeRange(0, binCount),
-            DeterministicDotProductOp(aData, bData, binCount, arraySize, partialSums));
+		OPENVDB_FOR_EACH(
+			DeterministicDotProductOp(aData, bData, binCount, arraySize, partialSums),
+			SizeRange(0, binCount));
 
         for (SizeType n = 0; n < binCount; ++n) {
             result += partialSums[n];
@@ -741,7 +732,7 @@ struct Vector<T>::InfNormOp
 
     T operator()(const SizeRange& range, T maxValue) const
     {
-        for (SizeType n = range.first, N = range.second; n < N; ++n) {
+        for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
             maxValue = Max(maxValue, Abs(data[n]));
         }
         return maxValue;
@@ -756,8 +747,12 @@ inline T
 Vector<T>::infNorm() const
 {
     // Parallelize over the elements of this vector.
-    T result = tbb::parallel_reduce(SizeRange(0, this->size()), /*seed=*/zeroVal<T>(),
-        InfNormOp(this->data()), /*join=*/[](T max1, T max2) { return Max(max1, max2); });
+    T result = OPENVDB_REDUCE_SEED_JOIN(
+		InfNormOp(this->data()),
+		SizeRange(0, this->size()),
+		/*seed=*/zeroVal<T>(),
+        /*join=*/[](T max1, T max2) { return Max(max1, max2); });
+
     return result;
 }
 
@@ -770,7 +765,7 @@ struct Vector<T>::IsFiniteOp
     bool operator()(const SizeRange& range, bool finite) const
     {
         if (finite) {
-            for (SizeType n = range.first, N = range.second; n < N; ++n) {
+            for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
                 if (!std::isfinite(data[n])) return false;
             }
         }
@@ -786,10 +781,13 @@ inline bool
 Vector<T>::isFinite() const
 {
     // Parallelize over the elements of this vector.
-    bool finite = tbb::parallel_reduce(SizeRange(0, this->size()), /*seed=*/true,
-        IsFiniteOp(this->data()),
+    bool finite = OPENVDB_REDUCE_SEED_JOIN(
+		IsFiniteOp(this->data()),
+		SizeRange(0, this->size()),
+		/*seed=*/true,
         /*join=*/[](bool finite1, bool finite2) { return (finite1 && finite2); });
-    return finite;
+
+	return finite;
 }
 
 
@@ -802,7 +800,7 @@ struct Vector<T>::EqOp
     bool operator()(const SizeRange& range, bool equal) const
     {
         if (equal) {
-            for (SizeType n = range.first, N = range.second; n < N; ++n) {
+            for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
                 if (!isApproxEqual(a[n], b[n], eps)) return false;
             }
         }
@@ -821,9 +819,13 @@ inline bool
 Vector<T>::eq(const Vector<OtherValueType>& other, ValueType eps) const
 {
     if (this->size() != other.size()) return false;
-    bool equal = tbb::parallel_reduce(SizeRange(0, this->size()), /*seed=*/true,
-        EqOp<OtherValueType>(this->data(), other.data(), eps),
+
+    bool equal = OPENVDB_REDUCE_SEED_JOIN(
+		EqOp<OtherValueType>(this->data(), other.data(), eps),
+		SizeRange(0, this->size()),
+		/*seed=*/true,
         /*join=*/[](bool eq1, bool eq2) { return (eq1 && eq2); });
+
     return equal;
 }
 
@@ -859,9 +861,9 @@ SparseStencilMatrix<ValueType, STENCIL_SIZE>::SparseStencilMatrix(SizeType numRo
     , mColumnIdxArray(new SizeType[mNumRows * STENCIL_SIZE])
     , mRowSizeArray(new SizeType[mNumRows])
 {
-    // Initialize the matrix to a null state by setting the size of each row to zero.
-    tbb::parallel_for(SizeRange(0, mNumRows),
-        internal::FillOp<SizeType>(mRowSizeArray.get(), /*value=*/0));
+	OPENVDB_FOR_EACH(
+		internal::FillOp<SizeType>(mRowSizeArray.get(), /*value=*/0),
+		SizeRange(0, mNumRows));
 }
 
 
@@ -877,7 +879,7 @@ struct SparseStencilMatrix<ValueType, STENCIL_SIZE>::MatrixCopyOp
         const SizeType* fromCol = from->mColumnIdxArray.get();
         ValueType* toVal = to->mValueArray.get();
         SizeType* toCol = to->mColumnIdxArray.get();
-        for (SizeType n = range.first, N = range.second; n < N; ++n) {
+        for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
             toVal[n] = fromVal[n];
             toCol[n] = fromCol[n];
         }
@@ -898,11 +900,14 @@ SparseStencilMatrix<ValueType, STENCIL_SIZE>::SparseStencilMatrix(const SparseSt
     SizeType size = mNumRows * STENCIL_SIZE;
 
     // Copy the value and column index arrays from the other matrix to this matrix.
-    tbb::parallel_for(SizeRange(0, size), MatrixCopyOp(/*from=*/other, /*to=*/*this));
+	OPENVDB_FOR_EACH(
+		MatrixCopyOp(/*from=*/other, /*to=*/*this),
+		SizeRange(0, size));
 
     // Copy the row size array from the other matrix to this matrix.
-    tbb::parallel_for(SizeRange(0, mNumRows),
-        internal::CopyOp<SizeType>(/*from=*/other.mRowSizeArray.get(), /*to=*/mRowSizeArray.get()));
+	OPENVDB_FOR_EACH(
+		internal::CopyOp<SizeType>(/*from=*/other.mRowSizeArray.get(), /*to=*/mRowSizeArray.get()),
+		SizeRange(0, mNumRows));
 }
 
 
@@ -941,7 +946,7 @@ struct SparseStencilMatrix<ValueType, STENCIL_SIZE>::RowScaleOp
 
     void operator()(const SizeRange& range) const
     {
-        for (SizeType n = range.first, N = range.second; n < N; ++n) {
+        for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
             RowEditor row = mat->getRowEditor(n);
             row.scale(s);
         }
@@ -958,7 +963,9 @@ inline void
 SparseStencilMatrix<ValueType, STENCIL_SIZE>::scale(const Scalar& s)
 {
     // Parallelize over the rows in the matrix.
-    tbb::parallel_for(SizeRange(0, mNumRows), RowScaleOp<Scalar>(*this, s));
+	OPENVDB_FOR_EACH(
+		RowScaleOp<Scalar>(*this, s),
+		SizeRange(0, mNumRows));
 }
 
 
@@ -971,7 +978,7 @@ struct SparseStencilMatrix<ValueType, STENCIL_SIZE>::VecMultOp
 
     void operator()(const SizeRange& range) const
     {
-        for (SizeType n = range.first, N = range.second; n < N; ++n) {
+        for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
             ConstRow row = mat->getConstRow(n);
             out[n] = row.dot(in, mat->numRows());
         }
@@ -1009,8 +1016,9 @@ SparseStencilMatrix<ValueType, STENCIL_SIZE>::vectorMultiply(
     const VecValueType* inVec, VecValueType* resultVec) const
 {
     // Parallelize over the rows in the matrix.
-    tbb::parallel_for(SizeRange(0, mNumRows),
-        VecMultOp<VecValueType>(*this, inVec, resultVec));
+	OPENVDB_FOR_EACH(
+		VecMultOp<VecValueType>(*this, inVec, resultVec),
+		SizeRange(0, mNumRows));
 }
 
 
@@ -1025,7 +1033,7 @@ struct SparseStencilMatrix<ValueType, STENCIL_SIZE>::EqOp
     bool operator()(const SizeRange& range, bool equal) const
     {
         if (equal) {
-            for (SizeType n = range.first, N = range.second; n < N; ++n) {
+            for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
                 if (!a->getConstRow(n).eq(b->getConstRow(n), eps)) return false;
             }
         }
@@ -1045,10 +1053,14 @@ SparseStencilMatrix<ValueType, STENCIL_SIZE>::eq(
     const SparseStencilMatrix<OtherValueType, STENCIL_SIZE>& other, ValueType eps) const
 {
     if (this->numRows() != other.numRows()) return false;
-    bool equal = tbb::parallel_reduce(SizeRange(0, this->numRows()), /*seed=*/true,
-        EqOp<OtherValueType>(*this, other, eps),
+
+    bool equal = OPENVDB_REDUCE_SEED_JOIN(
+		EqOp<OtherValueType>(*this, other, eps),
+		SizeRange(0, this->numRows()),
+		/*seed=*/true,
         /*join=*/[](bool eq1, bool eq2) { return (eq1 && eq2); });
-    return equal;
+
+	return equal;
 }
 
 
@@ -1060,7 +1072,7 @@ struct SparseStencilMatrix<ValueType, STENCIL_SIZE>::IsFiniteOp
     bool operator()(const SizeRange& range, bool finite) const
     {
         if (finite) {
-            for (SizeType n = range.first, N = range.second; n < N; ++n) {
+            for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
                 const ConstRow row = mat->getConstRow(n);
                 for (ConstValueIter it = row.cbegin(); it; ++it) {
                     if (!std::isfinite(*it)) return false;
@@ -1079,9 +1091,13 @@ inline bool
 SparseStencilMatrix<ValueType, STENCIL_SIZE>::isFinite() const
 {
     // Parallelize over the rows of this matrix.
-    bool finite = tbb::parallel_reduce(SizeRange(0, this->numRows()), /*seed=*/true,
-        IsFiniteOp(*this), /*join=*/[](bool finite1, bool finite2) { return (finite1&&finite2); });
-    return finite;
+    bool finite = OPENVDB_REDUCE_SEED_JOIN(
+		IsFiniteOp(*this),
+		SizeRange(0, this->numRows()),
+		/*seed=*/true,
+		/*join=*/[](bool finite1, bool finite2) { return (finite1&&finite2); });
+
+	return finite;
 }
 
 
@@ -1325,7 +1341,9 @@ public:
     JacobiPreconditioner(const MatrixType& A): BaseType(A), mDiag(A.numRows())
     {
         // Initialize vector mDiag with the values from the matrix diagonal.
-        tbb::parallel_for(SizeRange(0, A.numRows()), InitOp(A, mDiag.data()));
+		OPENVDB_FOR_EACH(
+			InitOp(A, mDiag.data()),
+			SizeRange(0, A.numRows()));
     }
 
     ~JacobiPreconditioner() override = default;
@@ -1337,7 +1355,9 @@ public:
         assert(r.size() == z.size());
         assert(r.size() == size);
 
-        tbb::parallel_for(SizeRange(0, size), ApplyOp(mDiag.data(), r.data(), z.data()));
+		OPENVDB_FOR_EACH(
+			ApplyOp(mDiag.data(), r.data(), z.data()),
+			SizeRange(0, size));
     }
 
     /// Return @c true if all values along the diagonal are finite.
@@ -1349,7 +1369,7 @@ private:
     {
         InitOp(const MatrixType& m, ValueType* v): mat(&m), vec(v) {}
         void operator()(const SizeRange& range) const {
-            for (SizeType n = range.first, N = range.second; n < N; ++n) {
+            for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
                 const ValueType val = mat->getValue(n, n);
                 assert(!isApproxZero(val, ValueType(0.0001)));
                 vec[n] = static_cast<ValueType>(1.0 / val);
@@ -1364,7 +1384,7 @@ private:
         ApplyOp(const ValueType* x_, const ValueType* y_, ValueType* out_):
             x(x_), y(y_), out(out_) {}
         void operator()(const SizeRange& range) const {
-            for (SizeType n = range.first, N = range.second; n < N; ++n) out[n] = x[n] * y[n];
+            for (SizeType n = range.begin(), N = range.end(); n < N; ++n) out[n] = x[n] * y[n];
         }
         const ValueType *x, *y; ValueType* out;
     };
@@ -1401,7 +1421,10 @@ public:
         const SizeType numRows = mLowerTriangular.numRows();
 
         // Copy the upper triangular part to the lower triangular part.
-        tbb::parallel_for(SizeRange(0, numRows), CopyToLowerOp(matrix, mLowerTriangular));
+		OPENVDB_FOR_EACH(
+			CopyToLowerOp(matrix, mLowerTriangular),
+			SizeRange(0, numRows));
+
 
         // Build the Incomplete Cholesky Matrix
         //
@@ -1480,8 +1503,9 @@ public:
         }
 
         // Build the transpose of the IC matrix: mUpperTriangular
-        tbb::parallel_for(SizeRange(0, numRows),
-            TransposeOp(matrix, mLowerTriangular, mUpperTriangular));
+		OPENVDB_FOR_EACH(
+			TransposeOp(matrix, mLowerTriangular, mUpperTriangular),
+			SizeRange(0, numRows));
     }
 
     ~IncompleteCholeskyPreconditioner() override = default;
@@ -1545,7 +1569,7 @@ private:
     {
         CopyToLowerOp(const MatrixType& m, TriangularMatrix& l): mat(&m), lower(&l) {}
         void operator()(const SizeRange& range) const {
-            for (SizeType n = range.first, N = range.second; n < N; ++n) {
+            for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
                 typename TriangularMatrix::RowEditor outRow = lower->getRowEditor(n);
                 outRow.clear();
                 typename MatrixType::ConstRow inRow = mat->getConstRow(n);
@@ -1564,7 +1588,7 @@ private:
         TransposeOp(const MatrixType& m, const TriangularMatrix& l, TriangularMatrix& u):
             mat(&m), lower(&l), upper(&u) {}
         void operator()(const SizeRange& range) const {
-            for (SizeType n = range.first, N = range.second; n < N; ++n) {
+            for (SizeType n = range.begin(), N = range.end(); n < N; ++n) {
                 typename TriangularMatrix::RowEditor outRow = upper->getRowEditor(n);
                 outRow.clear();
                 // Use the fact that matrix is symmetric.
@@ -1596,7 +1620,9 @@ template<typename T>
 inline void
 axpy(const T& a, const T* xVec, const T* yVec, T* resultVec, SizeType size)
 {
-    tbb::parallel_for(SizeRange(0, size), LinearOp<T>(a, xVec, yVec, resultVec));
+	OPENVDB_FOR_EACH(
+		LinearOp<T>(a, xVec, yVec, resultVec),
+		SizeRange(0, size));
 }
 
 /// Compute @e ax + @e y.
@@ -1619,7 +1645,9 @@ computeResidual(const MatrixOperator& A, const VecValueType* x,
     // Compute r = A * x.
     A.vectorMultiply(x, r);
     // Compute r = b - r.
-    tbb::parallel_for(SizeRange(0, A.numRows()), LinearOp<VecValueType>(-1.0, r, b, r));
+	OPENVDB_FOR_EACH(
+		LinearOp<VecValueType>(-1.0, r, b, r),
+		SizeRange(0, A.numRows()));
 }
 
 /// Compute @e r = @e b &minus; @e Ax.

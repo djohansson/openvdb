@@ -30,19 +30,13 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/tbb_thread.h>
-#include <tbb/task_scheduler_init.h>
-#include <tbb/enumerable_thread_specific.h>
-#include <tbb/parallel_for.h>
-#include <tbb/blocked_range.h>
-#endif
-
 #include <openvdb/Exceptions.h>
 #include <openvdb/util/CpuTimer.h>
 #include <openvdb/util/PagedArray.h>
 
+#include <chrono>
 #include <iostream>
+#include <thread>
 
 //#define BENCHMARK_PAGED_ARRAY
 
@@ -64,7 +58,7 @@ public:
     void testCpuTimer();
     void testPagedArray();
 
-    using RangeT = std::pair<size_t, size_t>;
+    using RangeT = BlockedRange<size_t>;
 
     // Multi-threading ArrayT::push_back
     template<typename ArrayT>
@@ -96,7 +90,7 @@ public:
     // Thread Local Storage version of BufferPushBack
     template<typename ArrayT>
     struct TLS_BufferPushBack {
-        using PoolT = tbb::enumerable_thread_specific<typename ArrayT::ValueBuffer>;
+        using PoolT = EnumerableThreadSpecific<typename ArrayT::ValueBuffer>;
         TLS_BufferPushBack(ArrayT &array) : mArray(&array), mPool(nullptr) {}
         void parallel(size_t size) {
             typename ArrayT::ValueBuffer exemplar(*mArray);//dummy used for initialization
@@ -120,14 +114,18 @@ CPPUNIT_TEST_SUITE_REGISTRATION(TestUtil);
 void
 TestUtil::testCpuTimer()
 {
+	using namespace std::chrono_literals;
+
     const int expected = 259, tolerance = 20;//milliseconds
-    const tbb::tick_count::interval_t sec(expected/1000.0);
+
+	std::chrono::milliseconds sec(expected);
 
     openvdb::util::CpuTimer timer;
-    tbb::this_tbb_thread::sleep(sec);
+	
+	std::this_thread::sleep_for(sec);
     const int actual1 = static_cast<int>(timer.delta());
     CPPUNIT_ASSERT_DOUBLES_EQUAL(expected, actual1, tolerance);
-    tbb::this_tbb_thread::sleep(sec);
+	std::this_thread::sleep_for(sec);
     const int actual2 = static_cast<int>(timer.delta());
     CPPUNIT_ASSERT_DOUBLES_EQUAL(2*expected, actual2, tolerance);
 }
@@ -227,8 +225,8 @@ TestUtil::testPagedArray()
         //    ArrayPushBack<ArrayT> tmp(d);
         //    tmp.parallel(problemSize);
         //}// is faster than:
-        tbb::parallel_for(std::pair<size_t, size_t>(0, problemSize, d.pageSize()),
-                          [&d](const std::pair<size_t, size_t> &range){
+        tbb::parallel_for(BlockedRange<size_t>(0, problemSize, d.pageSize()),
+                          [&d](const BlockedRange<size_t> &range){
                           for (size_t i=range.begin(); i!=range.end(); ++i) d.push_back(i);});
 #ifdef BENCHMARK_PAGED_ARRAY
         timer.stop();
@@ -268,8 +266,8 @@ TestUtil::testPagedArray()
             ArrayPushBack<ArrayT> tmp(d);
             tmp.parallel(problemSize);
         }// is faster than:
-        //tbb::parallel_for(std::pair<size_t, size_t>(0, problemSize, d.pageSize()),
-        //                  [&d](const std::pair<size_t, size_t> &range){
+        //tbb::parallel_for(BlockedRange<size_t>(0, problemSize, d.pageSize()),
+        //                  [&d](const BlockedRange<size_t> &range){
         //                  for (size_t i=range.begin(); i!=range.end(); ++i) d.push_back(i);});
 #ifdef BENCHMARK_PAGED_ARRAY
         timer.stop();
@@ -331,8 +329,8 @@ TestUtil::testPagedArray()
         v.clear();
         timer.start("8: Parallel tbb::concurrent_vector::push_back");
         using ArrayT = openvdb::util::PagedArray<size_t>;
-        tbb::parallel_for(std::pair<size_t, size_t>(0, problemSize, ArrayT::pageSize()),
-                          [&v](const std::pair<size_t, size_t> &range){
+        tbb::parallel_for(BlockedRange<size_t>(0, problemSize, ArrayT::pageSize()),
+                          [&v](const BlockedRange<size_t> &range){
                           for (size_t i=range.begin(); i!=range.end(); ++i) v.push_back(i);});
         timer.stop();
         tbb::parallel_sort(v.begin(), v.end());
@@ -402,8 +400,8 @@ TestUtil::testPagedArray()
             BufferPushBack<ArrayT> tmp(d);
             tmp.parallel(problemSize);
         }// is faster than:
-        //tbb::parallel_for(std::pair<size_t, size_t>(0, problemSize, d.pageSize()),
-        //                  [&d](const std::pair<size_t, size_t> &r){
+        //tbb::parallel_for(BlockedRange<size_t>(0, problemSize, d.pageSize()),
+        //                  [&d](const BlockedRange<size_t> &r){
         //                  typename ArrayT::ValueBuffer buffer(d);
         //                  for (size_t i=r.begin(), n=r.end(); i!=n; ++i) buffer.push_back(i);});
 #ifdef BENCHMARK_PAGED_ARRAY
@@ -476,9 +474,9 @@ TestUtil::testPagedArray()
             tmp.parallel(problemSize);
         }// is faster than:
         //ArrayT::ValueBuffer exemplar(d);//dummy used for initialization
-        ///tbb::enumerable_thread_specific<ArrayT::ValueBuffer> pool(exemplar);//thread local storage pool of ValueBuffers
-        //tbb::parallel_for(std::pair<size_t, size_t>(0, problemSize, d.pageSize()),
-        //                  [&pool](const std::pair<size_t, size_t> &range){
+        ///EnumerableThreadSpecific<ArrayT::ValueBuffer> pool(exemplar);//thread local storage pool of ValueBuffers
+        //tbb::parallel_for(BlockedRange<size_t>(0, problemSize, d.pageSize()),
+        //                  [&pool](const BlockedRange<size_t> &range){
         //                  ArrayT::ValueBuffer &buffer = pool.local();
         //                  for (size_t i=range.begin(); i!=range.end(); ++i) buffer.push_back(i);});
         //for (auto i=pool.begin(); i!=pool.end(); ++i) i->flush();
@@ -510,8 +508,8 @@ TestUtil::testPagedArray()
         using ArrayT = openvdb::util::PagedArray<size_t>;
         ArrayT d, d2;
 
-        tbb::parallel_for(std::pair<size_t, size_t>(0, problemSize, d.pageSize()),
-                          [&d](const std::pair<size_t, size_t> &range){
+        tbb::parallel_for(BlockedRange<size_t>(0, problemSize, d.pageSize()),
+                          [&d](const BlockedRange<size_t> &range){
                           ArrayT::ValueBuffer buffer(d);
                           for (size_t i=range.begin(); i!=range.end(); ++i) buffer.push_back(i);});
         CPPUNIT_ASSERT_EQUAL(problemSize, d.size());
@@ -522,8 +520,8 @@ TestUtil::testPagedArray()
         d.push_back(problemSize);
         CPPUNIT_ASSERT(d.isPartiallyFull());
 
-        tbb::parallel_for(std::pair<size_t, size_t>(problemSize+1, 2*problemSize+1, d2.pageSize()),
-                          [&d2](const std::pair<size_t, size_t> &range){
+        tbb::parallel_for(BlockedRange<size_t>(problemSize+1, 2*problemSize+1, d2.pageSize()),
+                          [&d2](const BlockedRange<size_t> &range){
                           ArrayT::ValueBuffer buffer(d2);
                           for (size_t i=range.begin(); i!=range.end(); ++i) buffer.push_back(i);});
         //for (size_t i=d.size(), n=i+problemSize; i<n; ++i) d2.push_back(i);

@@ -45,8 +45,6 @@
 #include "VelocityFields.h"                // VelocityIntegrator
 
 #ifdef OPENVDB_USE_TBB
-#include <tbb/blocked_range.h>             // threading
-#include <tbb/parallel_for.h>              // threading
 #include <tbb/task.h>                      // for cancel
 #endif
 
@@ -186,15 +184,15 @@ public:
 
         if (mInterrupter) mInterrupter->start("Advecting points by OpenVDB velocity field: ");
         if (mThreaded) {
-            tbb::parallel_for(std::pair<size_t, size_t>(0, mPoints->size()), *this);
+            tbb::parallel_for(BlockedRange<size_t>(0, mPoints->size()), *this);
         } else {
-            (*this)(std::pair<size_t, size_t>(0, mPoints->size()));
+            (*this)(BlockedRange<size_t>(0, mPoints->size()));
         }
         if (mInterrupter) mInterrupter->end();
     }
 
     /// Never call this method directly - it is use by TBB and has to be public!
-    void operator() (const std::pair<size_t, size_t> &range) const
+    void operator() (const BlockedRange<size_t> &range) const
     {
         if (mInterrupter && mInterrupter->wasInterrupted()) {
             tbb::task::self().cancel_group_execution();
@@ -325,16 +323,16 @@ public:
         const size_t N = mPoints->size();
 
         if (mThreaded) {
-            tbb::parallel_for(std::pair<size_t, size_t>(0, N), *this);
+            tbb::parallel_for(BlockedRange<size_t>(0, N), *this);
         } else {
-            (*this)(std::pair<size_t, size_t>(0, N));
+            (*this)(BlockedRange<size_t>(0, N));
         }
         if (mInterrupter) mInterrupter->end();
     }
 
 
     /// Never call this method directly - it is use by TBB and has to be public!
-    void operator() (const std::pair<size_t, size_t> &range) const
+    void operator() (const BlockedRange<size_t> &range) const
     {
         if (mInterrupter && mInterrupter->wasInterrupted()) {
             tbb::task::self().cancel_group_execution();

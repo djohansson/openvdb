@@ -34,13 +34,9 @@
 #include <openvdb/Types.h>
 #include <openvdb/tree/LeafNode.h>
 
+#include <chrono>
 #include <sstream>
 #include <iostream>
-
-#ifdef OPENVDB_USE_TBB
-#include <tbb/tick_count.h>
-#endif
-
 #include <iomanip>//for setprecision
 
 using namespace openvdb;
@@ -76,43 +72,45 @@ CPPUNIT_TEST_SUITE_REGISTRATION(TestIndexIterator);
 /// @endcode
 class ProfileTimer
 {
+	using hires_clock = std::chrono::high_resolution_clock;
+	using time_point = hires_clock::time_point;
+
 public:
-    /// @brief Prints message and starts timer.
-    ///
-    /// @note Should normally be followed by a call to stop()
-    ProfileTimer(const std::string& msg)
-    {
-        (void)msg;
+	/// @brief Prints message and starts timer.
+	///
+	/// @note Should normally be followed by a call to stop()
+	ProfileTimer(const std::string& msg)
+	{
+		(void)msg;
 #ifdef PROFILE
-        // padd string to 50 characters
-        std::string newMsg(msg);
-        if (newMsg.size() < 50)     newMsg.insert(newMsg.end(), 50 - newMsg.size(), ' ');
-        std::cerr << newMsg << " ... ";
+		// padd string to 50 characters
+		std::string newMsg(msg);
+		if (newMsg.size() < 50)     newMsg.insert(newMsg.end(), 50 - newMsg.size(), ' ');
+		std::cerr << newMsg << " ... ";
 #endif
-        mT0 = tbb::tick_count::now();
-    }
+		mT0 = hires_clock::now();
+	}
 
-    ~ProfileTimer() { this->stop(); }
+	~ProfileTimer() { this->stop(); }
 
-    /// Return Time diference in milliseconds since construction or start was called.
-    inline double delta() const
-    {
-        tbb::tick_count::interval_t dt = tbb::tick_count::now() - mT0;
-        return 1000.0*dt.seconds();
-    }
+	/// Return Time diference in milliseconds since construction or start was called.
+	inline double delta() const
+	{
+		return std::chrono::duration_cast<std::chrono::milliseconds>(hires_clock::now() - mT0).count();
+	}
 
-    /// @brief Print time in milliseconds since construction or start was called.
-    inline void stop() const
-    {
+	/// @brief Print time in milliseconds since construction or start was called.
+	inline void stop() const
+	{
 #ifdef PROFILE
-        std::stringstream ss;
-        ss << std::setw(6) << ::round(this->delta());
-        std::cerr << "completed in " << ss.str() << " ms\n";
+		std::stringstream ss;
+		ss << std::setw(6) << ::round(this->delta());
+		std::cerr << "completed in " << ss.str() << " ms\n";
 #endif
-    }
+	}
 
 private:
-    tbb::tick_count mT0;
+	time_point mT0;
 };// ProfileTimer
 
 

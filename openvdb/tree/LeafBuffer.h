@@ -324,7 +324,7 @@ LeafBuffer<T, Log2Dim>::operator=(const LeafBuffer& other)
             if (other.isOutOfCore()) this->deallocate();
         }
         if (other.isOutOfCore()) {
-            mOutOfCore = other.mOutOfCore;
+            mOutOfCore = other.mOutOfCore.load();
             mFileInfo = new FileInfo(*other.mFileInfo);
         } else if (other.mData != nullptr) {
             this->allocate();

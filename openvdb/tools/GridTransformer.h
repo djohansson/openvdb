@@ -44,11 +44,6 @@
 #include "SignedFloodFill.h" // for signedFloodFill
 #include "Prune.h" // for pruneLevelSet
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/blocked_range.h>
-#include <tbb/parallel_reduce.h>
-#endif
-
 #include <cmath>
 #include <functional>
 
@@ -897,7 +892,7 @@ GridResampler::applyTransform(const Transformer& xform,
         typename RangeProc::TileRange tileRange(tileIter);
 
         if (mThreaded) {
-            tbb::parallel_reduce(tileRange, proc);
+            OPENVDB_REDUCE(proc, tileRange);
         } else {
             proc(tileRange);
         }
@@ -918,7 +913,7 @@ GridResampler::applyTransform(const Transformer& xform,
     typename RangeProc::LeafRange leafRange(inTree.cbeginLeaf());
 
     if (mThreaded) {
-        tbb::parallel_reduce(leafRange, proc);
+		OPENVDB_REDUCE(proc, leafRange);
     } else {
         proc(leafRange);
     }

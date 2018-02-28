@@ -43,11 +43,6 @@
 
 #include <openvdb/Types.h>
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/parallel_for.h>
-#include <tbb/parallel_reduce.h>
-#endif
-
 #include <deque>
 
 
@@ -96,9 +91,11 @@ public:
         NodeRange(size_t begin, size_t end, const NodeList& nodeList, size_t grainSize=1):
             mEnd(end), mBegin(begin), mGrainSize(grainSize), mNodeList(nodeList) {}
 
+#ifdef OPENVDB_USE_TBB
         NodeRange(NodeRange& r, tbb::split):
             mEnd(r.mEnd), mBegin(doSplit(r)), mGrainSize(r.mGrainSize),
             mNodeList(r.mNodeList) {}
+#endif
 
         size_t size() const { return mEnd - mBegin; }
 
@@ -177,7 +174,7 @@ public:
     }
 
     template<typename NodeOp>
-    void reduce(NodeOp& op, bool threaded = true, size_t grainSize=1)
+    void reduce(NodeOp& op, size_t grainSize=1)
     {
         NodeReducer<NodeOp> transform(op);
         transform.run(this->nodeRange(grainSize), threaded);
@@ -194,7 +191,12 @@ private:
         }
         void run(const NodeRange& range, bool threaded = true)
         {
-            threaded ? tbb::parallel_for(range, *this) : (*this)(range);
+			if (threaded) {
+				OPENVDB_FOR_EACH(*this, range);
+			} else {
+				(*this)(range);
+			}
+
         }
         void operator()(const NodeRange& range) const
         {
@@ -210,14 +212,16 @@ private:
         NodeReducer(NodeOp& nodeOp) : mNodeOp(&nodeOp), mOwnsOp(false)
         {
         }
+#ifdef OPENVDB_USE_TBB
         NodeReducer(const NodeReducer& other, tbb::split) :
             mNodeOp(new NodeOp(*(other.mNodeOp), tbb::split())), mOwnsOp(true)
         {
         }
+#endif
         ~NodeReducer() { if (mOwnsOp) delete mNodeOp; }
         void run(const NodeRange& range, bool threaded = true)
         {
-            threaded ? tbb::parallel_reduce(range, *this) : (*this)(range);
+			OPENVDB_REDUCE(*this, range);
         }
         void operator()(const NodeRange& range)
         {

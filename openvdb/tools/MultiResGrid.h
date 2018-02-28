@@ -66,12 +66,6 @@
 #include "SignedFloodFill.h"
 #include "ValueTransformer.h"
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/blocked_range.h>
-#include <tbb/enumerable_thread_specific.h>
-#include <tbb/parallel_for.h>
-#endif
-
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -704,7 +698,7 @@ template<typename TreeType>
 struct MultiResGrid<TreeType>::MaskOp
 {
     using MaskT = typename TreeType::template ValueConverter<ValueMask>::Type;
-    using PoolType = tbb::enumerable_thread_specific<TreeType>;
+    using PoolType = EnumerableThreadSpecific<TreeType>;
     using ManagerT = tree::LeafManager<const MaskT>;
     using RangeT = typename ManagerT::LeafRange;
     using VoxelIterT = typename ManagerT::LeafNodeType::ValueOnCIter;
@@ -748,7 +742,7 @@ template<Index Order>
 struct MultiResGrid<TreeType>::FractionOp
 {
     using MaskT = typename TreeType::template ValueConverter<ValueMask>::Type;
-    using PoolType = tbb::enumerable_thread_specific<MaskT>;
+    using PoolType = EnumerableThreadSpecific<MaskT>;
     using PoolIterT = typename PoolType::iterator;
     using Manager1 = tree::LeafManager<const TreeType>;
     using Manager2 = tree::LeafManager<TreeType>;

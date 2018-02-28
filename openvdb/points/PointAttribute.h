@@ -506,7 +506,7 @@ inline void appendAttribute(PointDataTree& tree,
     tree::LeafManager<PointDataTree> leafManager(tree);
     AppendAttributeOp<PointDataTree> append(newDescriptor, pos, strideOrTotalSize,
                                             constantStride, hidden, transient);
-    tbb::parallel_for(leafManager.leafRange(), append);
+	OPENVDB_FOR_EACH(append, leafManager.leafRange());
 }
 
 
@@ -592,8 +592,9 @@ inline void collapseAttribute(  PointDataTree& tree,
     }
 
     LeafManagerT leafManager(tree);
-    tbb::parallel_for(leafManager.leafRange(),
-        CollapseAttributeOp<ValueType, PointDataTree>(index, uniformValue));
+	OPENVDB_FOR_EACH(
+		CollapseAttributeOp<ValueType, PointDataTree>(index, uniformValue),
+		leafManager.leafRange());
 }
 
 
@@ -626,8 +627,9 @@ inline void dropAttributes( PointDataTree& tree,
     // insert attributes using the new descriptor
 
     Descriptor::Ptr newDescriptor = descriptor.duplicateDrop(indices);
-    tbb::parallel_for(LeafManagerT(tree).leafRange(),
-        DropAttributesOp<PointDataTree>(indices, newDescriptor));
+	OPENVDB_FOR_EACH(
+		DropAttributesOp<PointDataTree>(indices, newDescriptor),
+		LeafManagerT(tree).leafRange());
 }
 
 
@@ -756,7 +758,9 @@ inline void compactAttributes(PointDataTree& tree)
     auto iter = tree.beginLeaf();
     if (!iter)  return;
 
-    tbb::parallel_for(LeafManagerT(tree).leafRange(), CompactAttributesOp<PointDataTree>());
+	OPENVDB_FOR_EACH(
+		CompactAttributesOp<PointDataTree>(),
+		LeafManagerT(tree).leafRange());
 }
 
 
@@ -789,8 +793,9 @@ inline void bloscCompressAttribute( PointDataTree& tree,
 
     std::vector<size_t> indices{index};
 
-    tbb::parallel_for(LeafManagerT(tree).leafRange(),
-        BloscCompressAttributesOp<PointDataTree>(indices));
+	OPENVDB_FOR_EACH(
+		BloscCompressAttributesOp<PointDataTree>(indices),
+		LeafManagerT(tree).leafRange());
 }
 
 ////////////////////////////////////////

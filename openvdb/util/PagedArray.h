@@ -48,13 +48,6 @@
 #include <iostream>
 #include <algorithm>// std::swap
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/atomic.h>
-#include <tbb/spin_mutex.h>
-#include <tbb/parallel_for.h>
-#include <tbb/parallel_sort.h>
-#endif
-
 namespace openvdb {
 OPENVDB_USE_VERSION_NAMESPACE
 namespace OPENVDB_VERSION_NAME {
@@ -97,8 +90,8 @@ namespace util {
 /// @code
 ///   PagedArray<size_t> array;
 ///   tbb::parallel_for(
-///       std::pair<size_t, size_t>(0, 10000, array.pageSize()),
-///       [&array](const std::pair<size_t, size_t>& range) {
+///       BlockedRange<size_t>(0, 10000, array.pageSize()),
+///       [&array](const BlockedRange<size_t>& range) {
 ///           for (size_t i=range.begin(); i!=range.end(); ++i) array.push_back(i);
 ///       }
 ///   );
@@ -129,8 +122,8 @@ namespace util {
 /// @code
 ///   PagedArray<size_t> array;
 ///   tbb::parallel_for(
-///       std::pair<size_t, size_t>(0, 10000, array.pageSize()),
-///       [&array](const std::pair<size_t, size_t>& range) {
+///       BlockedRange<size_t>(0, 10000, array.pageSize()),
+///       [&array](const BlockedRange<size_t>& range) {
 ///           PagedArray<size_t>::ValueBuffer buffer(array);
 ///           for (size_t i=range.begin(); i!=range.end(); ++i) buffer.push_back(i);
 ///       }
@@ -141,11 +134,11 @@ namespace util {
 /// @code
 ///   PagedArray<size_t> array;
 ///   PagedArray<size_t>::ValueBuffer exemplar(array);//dummy used for initialization
-///   tbb::enumerable_thread_specific<PagedArray<size_t>::ValueBuffer>
+///   EnumerableThreadSpecific<PagedArray<size_t>::ValueBuffer>
 ///       pool(exemplar);//thread local storage pool of ValueBuffers
 ///   tbb::parallel_for(
-///       std::pair<size_t, size_t>(0, 10000, array.pageSize()),
-///       [&pool](const std::pair<size_t, size_t>& range) {
+///       BlockedRange<size_t>(0, 10000, array.pageSize()),
+///       [&pool](const BlockedRange<size_t>& range) {
 ///           PagedArray<size_t>::ValueBuffer &buffer = pool.local();
 ///           for (size_t i=range.begin(); i!=range.end(); ++i) buffer.push_back(i);
 ///       }
@@ -301,10 +294,10 @@ public:
     /// @note Multi-threaded
     void fill(const ValueType& v)
     {
-        auto op = [&](const std::pair<size_t, size_t>& r){
+        auto op = [&](const BlockedRange<size_t>& r){
             for(size_t i=r.begin(); i!=r.end(); ++i) mPageTable[i]->fill(v);
         };
-        tbb::parallel_for(std::pair<size_t, size_t>(0, this->pageCount()), op);
+        tbb::parallel_for(BlockedRange<size_t>(0, this->pageCount()), op);
     }
 
     /// @brief Copy the first @a count values in this PageArray into
@@ -318,16 +311,16 @@ public:
     {
         size_t last_page = count >> Log2PageSize;
         if (last_page >= this->pageCount()) return false;
-        auto op = [&](const std::pair<size_t, size_t>& r){
+        auto op = [&](const BlockedRange<size_t>& r){
             for (size_t i=r.begin(); i!=r.end(); ++i) {
                 mPageTable[i]->copy(p+i*Page::Size, Page::Size);
             }
         };
         if (size_t m = count & Page::Mask) {//count is not divisible by page size
-            tbb::parallel_for(std::pair<size_t, size_t>(0, last_page, 32), op);
+            tbb::parallel_for(BlockedRange<size_t>(0, last_page, 32), op);
             mPageTable[last_page]->copy(p+last_page*Page::Size, m);
         } else {
-            tbb::parallel_for(std::pair<size_t, size_t>(0, last_page+1, 32), op);
+            tbb::parallel_for(BlockedRange<size_t>(0, last_page+1, 32), op);
         }
         return true;
     }

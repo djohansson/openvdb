@@ -614,9 +614,9 @@ cook(ThreadingMode mode, size_t swapBuffer)
     if (mParent->mTracker.getGrainSize()==0) {
         (*this)(range);
     } else if (mode == PARALLEL_FOR) {
-        tbb::parallel_for(range, *this);
+        OPENVDB_FOR_EACH(*this, range);
     } else if (mode == PARALLEL_REDUCE) {
-        tbb::parallel_reduce(range, *this);
+		OPENVDB_REDUCE(*this, range);
     } else {
         OPENVDB_THROW(ValueError, "expected threading mode " << int(PARALLEL_FOR)
             << " or " << int(PARALLEL_REDUCE) << ", got " << int(mode));

@@ -45,12 +45,6 @@
 #include <openvdb/Types.h>
 #include "TreeIterator.h" // for CopyConstness
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/blocked_range.h>
-#include <tbb/parallel_for.h>
-#include <tbb/parallel_reduce.h>
-#endif
-
 #include <functional>
 #include <type_traits>
 
@@ -123,7 +117,7 @@ public:
     using LeafIterType = typename leafmgr::TreeTraits<TreeT>::LeafIterType;
     using NonConstBufferType = typename LeafType::Buffer;
     using BufferType = typename CopyConstness<TreeType, NonConstBufferType>::Type;
-    using RangeType = std::pair<size_t, size_t>; // leaf index range
+    using RangeType = BlockedRange<size_t>; // leaf index range
     static const Index DEPTH = 2; // root + leaf nodes
 
     static const bool IsConstTree = leafmgr::TreeTraits<TreeT>::IsConstTree;
@@ -196,6 +190,7 @@ public:
 
         bool is_divisible() const {return mGrainSize < this->size();}
 
+#ifdef OPENVDB_USE_TBB
         LeafRange(LeafRange& r, tbb::split)
             : mEnd(r.mEnd)
             , mBegin(doSplit(r))
@@ -203,6 +198,7 @@ public:
             , mLeafManager(r.mLeafManager)
         {
         }
+#endif
 
     private:
         size_t mEnd, mBegin, mGrainSize;
@@ -335,12 +331,13 @@ public:
     /// @note Multi-threaded for better performance than Tree::activeLeafVoxelCount
     Index64 activeLeafVoxelCount() const
     {
-        return tbb::parallel_reduce(this->leafRange(), Index64(0),
-            [] (const LeafRange& range, Index64 sum) -> Index64 {
-                for (const auto& leaf: range) { sum += leaf.onVoxelCount(); }
-                return sum;
-            },
-            [] (Index64 n, Index64 m) -> Index64 { return n + m; });
+		auto reduce = [](const LeafRange& range, Index64 sum) -> Index64
+		{
+			for (const auto& leaf : range) { sum += leaf.onVoxelCount(); }
+			return sum;
+		};
+		auto join = [](Index64 n, Index64 m) -> Index64 { return n + m; };
+        return OPENVDB_REDUCE(reduce, this->leafRange(), Index64(0), join);
     }
 
     /// Return a const reference to tree associated with this manager.
@@ -469,7 +466,6 @@ public:
     ///          required for tbb::parallel_for.
     ///
     /// @param op        user-supplied functor, see examples for interface details.
-    /// @param threaded  optional toggle to disable threading, on by default.
     /// @param grainSize optional parameter to specify the grainsize
     ///                  for threading, one by default.
     ///
@@ -525,10 +521,10 @@ public:
     /// };
     /// @endcode
     template<typename LeafOp>
-    void foreach(const LeafOp& op, bool threaded = true, size_t grainSize=1)
+    void foreach(const LeafOp& op, size_t grainSize=1)
     {
         LeafTransformer<LeafOp> transform(op);
-        transform.run(this->leafRange(grainSize), threaded);
+        transform.run(this->leafRange(grainSize));
     }
 
     /// @brief   Threaded method that applies a user-supplied functor
@@ -574,10 +570,10 @@ public:
     ///
     /// @endcode
     template<typename LeafOp>
-    void reduce(LeafOp& op, bool threaded = true, size_t grainSize=1)
+    void reduce(LeafOp& op, size_t grainSize=1)
     {
         LeafReducer<LeafOp> transform(op);
-        transform.run(this->leafRange(grainSize), threaded);
+        transform.run(this->leafRange(grainSize));
     }
 
 
@@ -700,13 +696,9 @@ private:
         this->syncAllBuffers(serial);
     }
 
-    void cook(size_t grainsize)
-    {
-        if (grainsize>0) {
-            tbb::parallel_for(this->getRange(grainsize), *this);
-        } else {
-            (*this)(this->getRange());
-        }
+	void cook(size_t grainsize)
+	{
+		OPENVDB_FOR_EACH(*this, (this->getRange(std::max<size_t>(1, grainsize))));
     }
 
     void doSwapLeafBuffer(const RangeType& r, size_t auxBufferIdx)
@@ -761,9 +753,9 @@ private:
         LeafTransformer(const LeafOp &leafOp) : mLeafOp(leafOp)
         {
         }
-        void run(const LeafRange &range, bool threaded) const
+        void run(const LeafRange &range) const
         {
-            threaded ? tbb::parallel_for(range, *this) : (*this)(range);
+			OPENVDB_FOR_EACH(*this, range);
         }
         void operator()(const LeafRange &range) const
         {
@@ -780,14 +772,16 @@ private:
         LeafReducer(LeafOp &leafOp) : mLeafOp(&leafOp), mOwnsOp(false)
         {
         }
+#ifdef OPENVDB_USE_TBB
         LeafReducer(const LeafReducer &other, tbb::split)
             : mLeafOp(new LeafOp(*(other.mLeafOp), tbb::split())), mOwnsOp(true)
         {
         }
+#endif
         ~LeafReducer() { if (mOwnsOp) delete mLeafOp; }
-        void run(const LeafRange& range, bool threaded)
+        void run(const LeafRange& range)
         {
-            threaded ? tbb::parallel_reduce(range, *this) : (*this)(range);
+            OPENVDB_REDUCE(*this, range);
         }
         void operator()(const LeafRange& range)
         {
@@ -805,8 +799,9 @@ private:
         PrefixSum(const LeafRange& r, size_t* offsets, size_t& prefix)
             : mOffsets(offsets)
         {
-            tbb::parallel_for( r, *this);
-            for (size_t i=0, leafCount = r.size(); i<leafCount; ++i) {
+            OPENVDB_FOR_EACH(*this, r);
+
+			for (size_t i=0, leafCount = r.size(); i<leafCount; ++i) {
                 size_t tmp = offsets[i];
                 offsets[i] = prefix;
                 prefix += tmp;

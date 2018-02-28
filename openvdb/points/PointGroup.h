@@ -489,7 +489,7 @@ inline void appendGroup(PointDataTree& tree, const Name& group)
         // insert new group attribute
 
         AppendAttributeOp<PointDataTree> append(descriptor, pos);
-        tbb::parallel_for(typename tree::template LeafManager<PointDataTree>(tree).leafRange(), append);
+		OPENVDB_FOR_EACH(append, typename tree::template LeafManager<PointDataTree>(tree).leafRange());
     }
     else {
         // make the descriptor unique before we modify the group map
@@ -653,7 +653,7 @@ inline void compactGroups(PointDataTree& tree)
         const GroupIndex targetIndex = attributeSet.groupIndex(targetOffset);
 
         CopyGroupOp<PointDataTree> copy(targetIndex, sourceIndex);
-        tbb::parallel_for(typename tree::template LeafManager<PointDataTree>(tree).leafRange(), copy);
+		OPENVDB_FOR_EACH(copy, typename tree::template LeafManager<PointDataTree>(tree).leafRange());
 
         descriptor->setGroup(sourceName, targetOffset);
     }
@@ -709,12 +709,12 @@ inline void setGroup(   PointDataTree& tree,
     if (remove) {
         SetGroupFromIndexOp<PointDataTree,
                             PointIndexTree, false> set(indexTree, membership, index);
-        tbb::parallel_for(LeafManagerT(tree).leafRange(), set);
+		OPENVDB_FOR_EACH(set, LeafManagerT(tree).leafRange());
     }
     else {
         SetGroupFromIndexOp<PointDataTree,
                             PointIndexTree, true> set(indexTree, membership, index);
-        tbb::parallel_for(LeafManagerT(tree).leafRange(), set);
+		OPENVDB_FOR_EACH(set, LeafManagerT(tree).leafRange());
     }
 }
 
@@ -747,8 +747,10 @@ inline void setGroup(   PointDataTree& tree,
 
     // set membership based on member variable
 
-    if (member)     tbb::parallel_for(LeafManagerT(tree).leafRange(), SetGroupOp<PointDataTree, true>(index));
-    else            tbb::parallel_for(LeafManagerT(tree).leafRange(), SetGroupOp<PointDataTree, false>(index));
+    if (member)
+		OPENVDB_FOR_EACH((SetGroupOp<PointDataTree, true>(index)), LeafManagerT(tree).leafRange());
+    else
+		OPENVDB_FOR_EACH((SetGroupOp<PointDataTree, false>(index)), LeafManagerT(tree).leafRange());
 }
 
 
@@ -781,7 +783,7 @@ inline void setGroupByFilter(   PointDataTree& tree,
     // set membership using filter
 
     SetGroupByFilterOp<PointDataTree, FilterT> set(index, filter);
-    tbb::parallel_for(LeafManagerT(tree).leafRange(), set);
+    OPENVDB_FOR_EACH(set, LeafManagerT(tree).leafRange());
 }
 
 

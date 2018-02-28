@@ -50,10 +50,6 @@
 #include "PointDataGrid.h"
 #include "PointGroup.h"
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/parallel_reduce.h>
-#endif
-
 #include <type_traits>
 
 namespace openvdb {
@@ -746,13 +742,15 @@ struct CalculatePositionBounds
         , mMin(std::numeric_limits<Real>::max())
         , mMax(-std::numeric_limits<Real>::max()) {}
 
+#ifdef OPENVDB_USE_TBB
     CalculatePositionBounds(const CalculatePositionBounds& other, tbb::split)
         : mPositions(other.mPositions)
         , mInverseMat(other.mInverseMat)
         , mMin(std::numeric_limits<Real>::max())
         , mMax(-std::numeric_limits<Real>::max()) {}
+#endif
 
-    void operator()(const std::pair<size_t, size_t>& range) {
+    void operator()(const BlockedRange<size_t>& range) {
         Vec3R pos;
         for (size_t n = range.begin(), N = range.end(); n != N; ++n) {
             mPositions.getPos(n, pos);
@@ -819,7 +817,7 @@ createPointDataGrid(const PointIndexGridT& pointIndexGrid, const PositionArrayT&
 
     InitialiseAttributesOp<PointDataTreeT, PointIndexTreeT> initialise(
                                 pointIndexGrid.tree(), descriptor);
-    tbb::parallel_for(leafRange, initialise);
+	OPENVDB_FOR_EACH(initialise, leafRange);
 
     // populate position attribute
 
@@ -828,8 +826,7 @@ createPointDataGrid(const PointIndexGridT& pointIndexGrid, const PositionArrayT&
                                 PositionArrayT> populate(pointIndexTree,
                                                         xform,
                                                         positions);
-
-    tbb::parallel_for(leafRange, populate);
+	OPENVDB_FOR_EACH(populate, leafRange);
 
     auto grid = PointDataGridT::create(treePtr);
     grid->setTransform(xform.copy());
@@ -886,7 +883,7 @@ populateAttribute(PointDataTreeT& tree, const PointIndexTreeT& pointIndexTree,
     PopulateAttributeOp<PointDataTreeT,
                         PointIndexTreeT,
                         PointArrayT> populate(pointIndexTree, data, index, stride);
-    tbb::parallel_for(leafManager.leafRange(), populate);
+	OPENVDB_FOR_EACH(populate, leafManager.leafRange());
 }
 
 
@@ -931,7 +928,8 @@ convertPointDataGridPosition(   PositionAttribute& positionAttribute,
     ConvertPointDataGridPositionOp<TreeType, PositionAttribute> convert(
                     positionAttribute, pointOffsets, startOffset, grid.transform(), positionIndex,
                     newIncludeGroups, newExcludeGroups, inCoreOnly);
-    tbb::parallel_for(leafManager.leafRange(), convert);
+	OPENVDB_FOR_EACH(convert, leafManager.leafRange());
+
     positionAttribute.compact();
 }
 
@@ -975,7 +973,8 @@ convertPointDataGridAttribute(  TypedAttribute& attribute,
     ConvertPointDataGridAttributeOp<PointDataTreeT, TypedAttribute> convert(
                         attribute, pointOffsets, startOffset, arrayIndex, stride,
                         newIncludeGroups, newExcludeGroups, inCoreOnly);
-        tbb::parallel_for(leafManager.leafRange(), convert);
+	OPENVDB_FOR_EACH(convert, leafManager.leafRange());
+
     attribute.compact();
 }
 
@@ -1017,7 +1016,7 @@ convertPointDataGridGroup(  Group& group,
     ConvertPointDataGridGroupOp<PointDataTree, Group> convert(
                     group, pointOffsets, startOffset, index,
                     newIncludeGroups, newExcludeGroups, inCoreOnly);
-    tbb::parallel_for(leafManager.leafRange(), convert);
+	OPENVDB_FOR_EACH(convert, leafManager.leafRange());
 
     // must call this after modifying point groups in parallel
 
@@ -1094,9 +1093,9 @@ computeVoxelSize(  const PositionWrapper& positions,
     math::Mat4d inverseTransform = transform.inverse();
     inverseTransform = math::unit(inverseTransform);
 
-    std::pair<size_t, size_t> range(0, numPoints);
+    BlockedRange<size_t> range(0, numPoints);
     CalculatePositionBounds<PositionWrapper> calculateBounds(positions, inverseTransform);
-    tbb::parallel_reduce(range, calculateBounds);
+	OPENVDB_REDUCE(calculateBounds, range);
 
     BBoxd bbox = calculateBounds.getBoundingBox();
 

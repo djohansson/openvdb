@@ -48,11 +48,6 @@
 #include <limits>
 #include <list>
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/blocked_range.h>
-#include <tbb/parallel_reduce.h>
-#endif
-
 
 namespace openvdb {
 OPENVDB_USE_VERSION_NAMESPACE
@@ -147,7 +142,7 @@ struct FindMinMaxVoxelValue {
     {
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) {
+    void operator()(const BlockedRange<size_t>& range) {
         for (size_t n = range.begin(), N = range.end(); n < N; ++n) {
             const ValueType* data = mNodes[n]->buffer().data();
             for (Index i = 0; i < LeafNodeType::SIZE; ++i) {
@@ -277,7 +272,7 @@ LevelSetFracture<GridType, InterruptType>::isValidFragment(GridType& grid) const
         if (activeVoxelCount < 27) return false;
 
         level_set_fracture_internal::FindMinMaxVoxelValue<LeafNodeType> op(nodes);
-        tbb::parallel_reduce(std::pair<size_t, size_t>(0, nodes.size()), op);
+		OPENVDB_REDUCE(op, BlockedRange<size_t>(0, nodes.size()));
 
         if ((op.minValue < 0) == (op.maxValue < 0)) return false;
     }

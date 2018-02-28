@@ -40,10 +40,6 @@
 #ifndef OPENVDB_TOOLS_VOLUME_ADVECT_HAS_BEEN_INCLUDED
 #define OPENVDB_TOOLS_VOLUME_ADVECT_HAS_BEEN_INCLUDED
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/parallel_for.h>
-#endif
-
 #include <openvdb/Types.h>
 #include <openvdb/math/Math.h>
 #include <openvdb/util/NullInterrupter.h>
@@ -408,7 +404,7 @@ struct VolumeAdvection<VelocityGridT, StaggeredVelocity, InterrupterType>::Advec
     inline void cook(const LeafRangeT& range)
     {
         if (mParent->mGrainSize > 0) {
-            tbb::parallel_for(range, *this);
+            OPENVDB_FOR_EACH(*this, range);
         } else {
             (*this)(range);
         }

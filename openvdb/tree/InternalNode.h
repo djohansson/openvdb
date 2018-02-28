@@ -44,10 +44,6 @@
 #include "Iterator.h"
 #include "NodeUnion.h"
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/parallel_for.h>
-#endif
-
 #include <memory>
 #include <type_traits>
 
@@ -908,14 +904,10 @@ template<typename OtherInternalNode>
 struct InternalNode<ChildT, Log2Dim>::DeepCopy
 {
     DeepCopy(const OtherInternalNode* source, InternalNode* target) : s(source), t(target) {
-#ifdef OPENVDB_USE_TBB
-        tbb::parallel_for(std::pair<Index, Index>(0, NUM_VALUES), *this);
-#else
-        (*this)(std::pair<Index, Index>(0, NUM_VALUES));
-#endif
+        OPENVDB_FOR_EACH(*this, BlockedRange<Index>(0, NUM_VALUES));
     }
-    void operator()(const std::pair<Index, Index> &r) const {
-        for (Index i = r.first, end=r.second; i!=end; ++i) {
+    void operator()(const BlockedRange<Index> &r) const {
+        for (Index i = r.begin(), end=r.end(); i!=end; ++i) {
             if (s->mChildMask.isOff(i)) {
                 t->mNodes[i].setValue(ValueType(s->mNodes[i].getValue()));
             } else {
@@ -956,14 +948,10 @@ struct InternalNode<ChildT, Log2Dim>::TopologyCopy1
 {
     TopologyCopy1(const OtherInternalNode* source, InternalNode* target,
                   const ValueType& background) : s(source), t(target), b(background) {
-#ifdef OPENVDB_USE_TBB
-        tbb::parallel_for(std::pair<Index, Index>(0, NUM_VALUES), *this);
-#else
-        (*this)(std::pair<Index, Index>(0, NUM_VALUES));
-#endif
+		OPENVDB_FOR_EACH(*this, BlockedRange<Index>(0, NUM_VALUES));
     }
-    void operator()(const std::pair<Index, Index> &r) const {
-        for (Index i = r.first, end=r.second; i!=end; ++i) {
+    void operator()(const BlockedRange<Index> &r) const {
+        for (Index i = r.begin(), end=r.end(); i!=end; ++i) {
             if (s->isChildMaskOn(i)) {
                 t->mNodes[i].setChild(new ChildNodeType(*(s->mNodes[i].getChild()),
                                                         b, TopologyCopy()));
@@ -996,14 +984,10 @@ struct InternalNode<ChildT, Log2Dim>::TopologyCopy2
     TopologyCopy2(const OtherInternalNode* source, InternalNode* target,
                   const ValueType& offValue, const ValueType& onValue)
         : s(source), t(target), offV(offValue), onV(onValue) {
-#ifdef OPENVDB_USE_TBB
-        tbb::parallel_for(std::pair<Index, Index>(0, NUM_VALUES), *this);
-#else
-		(*this)(std::pair<Index, Index>(0, NUM_VALUES));
-#endif
+		OPENVDB_FOR_EACH(*this, BlockedRange<Index>(0, NUM_VALUES));
     }
-    void operator()(const std::pair<Index, Index> &r) const {
-        for (Index i = r.first, end=r.second; i!=end; ++i) {
+    void operator()(const BlockedRange<Index> &r) const {
+        for (Index i = r.begin(), end=r.end(); i!=end; ++i) {
             if (s->isChildMaskOn(i)) {
                 t->mNodes[i].setChild(new ChildNodeType(*(s->mNodes[i].getChild()),
                                                         offV, onV, TopologyCopy()));
@@ -2325,18 +2309,14 @@ template<typename ChildT, Index Log2Dim>
 struct InternalNode<ChildT, Log2Dim>::VoxelizeActiveTiles
 {
     VoxelizeActiveTiles(InternalNode &node) : mNode(&node) {
-#ifdef OPENVDB_USE_TBB
-        tbb::parallel_for(std::pair<Index, Index>(0, NUM_VALUES), *this);
-#else
-		(*this)(std::pair<Index, Index>(0, NUM_VALUES));
-#endif
+		OPENVDB_FOR_EACH(*this, BlockedRange<Index>(0, NUM_VALUES));
 
         node.mChildMask |= node.mValueMask;
         node.mValueMask.setOff();
     }
-    void operator()(const std::pair<Index, Index> &r) const
+    void operator()(const BlockedRange<Index> &r) const
     {
-        for (Index i = r.first, end=r.second; i!=end; ++i) {
+        for (Index i = r.begin(), end=r.end(); i!=end; ++i) {
             if (mNode->mChildMask.isOn(i)) {// Loop over node's child nodes
                 mNode->mNodes[i].getChild()->voxelizeActiveTiles(true);
             } else if (mNode->mValueMask.isOn(i)) {// Loop over node's active tiles
@@ -2519,11 +2499,7 @@ struct InternalNode<ChildT, Log2Dim>::TopologyUnion
         { tV = (tV | sV) & ~tC; }
     };
     TopologyUnion(const OtherInternalNode* source, InternalNode* target) : s(source), t(target) {
-#ifdef OPENVDB_USE_TBB
-        tbb::parallel_for(std::pair<Index, Index>(0, NUM_VALUES), *this);
-#else
-		(*this)(std::pair<Index, Index>(0, NUM_VALUES));
-#endif
+		OPENVDB_FOR_EACH(*this, BlockedRange<Index>(0, NUM_VALUES));
 
         // Bit processing is done in a single thread!
         t->mChildMask |= s->mChildMask;//serial but very fast bitwise post-process
@@ -2531,8 +2507,8 @@ struct InternalNode<ChildT, Log2Dim>::TopologyUnion
         t->mValueMask.foreach(s->mValueMask, t->mChildMask, op);
         assert((t->mValueMask & t->mChildMask).isOff());//no overlapping active tiles or child nodes
     }
-    void operator()(const std::pair<Index, Index> &r) const {
-        for (Index i = r.first, end=r.second; i!=end; ++i) {
+    void operator()(const BlockedRange<Index> &r) const {
+        for (Index i = r.begin(), end=r.end(); i!=end; ++i) {
             if (s->mChildMask.isOn(i)) {// Loop over other node's child nodes
                 const typename OtherInternalNode::ChildNodeType& other = *(s->mNodes[i].getChild());
                 if (t->mChildMask.isOn(i)) {//this has a child node
@@ -2569,11 +2545,7 @@ struct InternalNode<ChildT, Log2Dim>::TopologyIntersection
     };
     TopologyIntersection(const OtherInternalNode* source, InternalNode* target,
                          const ValueType& background) : s(source), t(target), b(background) {
-#ifdef OPENVDB_USE_TBB
-        tbb::parallel_for(std::pair<Index, Index>(0, NUM_VALUES), *this);
-#else
-		(*this)(std::pair<Index, Index>(0, NUM_VALUES));
-#endif
+		OPENVDB_FOR_EACH(*this, BlockedRange<Index>(0, NUM_VALUES));
 
         // Bit processing is done in a single thread!
         A op;
@@ -2582,8 +2554,8 @@ struct InternalNode<ChildT, Log2Dim>::TopologyIntersection
         t->mValueMask &= s->mValueMask;
         assert((t->mValueMask & t->mChildMask).isOff());//no overlapping active tiles or child nodes
     }
-    void operator()(const std::pair<Index, Index> &r) const {
-        for (Index i = r.first, end=r.second; i!=end; ++i) {
+    void operator()(const BlockedRange<Index> &r) const {
+        for (Index i = r.begin(), end=r.end(); i!=end; ++i) {
             if (t->mChildMask.isOn(i)) {// Loop over this node's child nodes
                 ChildT* child = t->mNodes[i].getChild();
                 if (s->mChildMask.isOn(i)) {//other also has a child node
@@ -2625,11 +2597,7 @@ struct InternalNode<ChildT, Log2Dim>::TopologyDifference
     };
     TopologyDifference(const OtherInternalNode* source, InternalNode* target,
                        const ValueType& background) : s(source), t(target), b(background) {
-#ifdef OPENVDB_USE_TBB
-        tbb::parallel_for(std::pair<Index, Index>(0, NUM_VALUES), *this);
-#else
-		(*this)(std::pair<Index, Index>(0, NUM_VALUES));
-#endif
+		OPENVDB_FOR_EACH(*this, BlockedRange<Index>(0, NUM_VALUES));
 
         // Bit processing is done in a single thread!
         const NodeMaskType oldChildMask(t->mChildMask);//important to avoid cross pollution
@@ -2640,8 +2608,8 @@ struct InternalNode<ChildT, Log2Dim>::TopologyDifference
         t->mValueMask.foreach(t->mChildMask, s->mValueMask, oldChildMask, op2);
         assert((t->mValueMask & t->mChildMask).isOff());//no overlapping active tiles or child nodes
     }
-    void operator()(const std::pair<Index, Index> &r) const {
-        for (Index i = r.first, end=r.second; i!=end; ++i) {
+    void operator()(const BlockedRange<Index> &r) const {
+        for (Index i = r.begin(), end=r.end(); i!=end; ++i) {
             if (t->mChildMask.isOn(i)) {// Loop over this node's child nodes
                 ChildT* child = t->mNodes[i].getChild();
                 if (s->mChildMask.isOn(i)) {

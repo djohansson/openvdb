@@ -37,11 +37,6 @@
 #ifndef OPENVDB_TOOLS_LEVEL_SET_ADVECT_HAS_BEEN_INCLUDED
 #define OPENVDB_TOOLS_LEVEL_SET_ADVECT_HAS_BEEN_INCLUDED
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/parallel_for.h>
-#include <tbb/parallel_reduce.h>
-#endif
-
 #include <openvdb/Platform.h>
 #include "LevelSetTracker.h"
 #include "VelocityFields.h" // for EnrightField
@@ -555,7 +550,7 @@ cook(const char* msg, size_t swapBuffer)
     const int grainSize   = mParent.mTracker.getGrainSize();
     const LeafRange range = mParent.mTracker.leafs().leafRange(grainSize);
 
-    grainSize == 0 ? (*this)(range) : tbb::parallel_for(range, *this);
+    grainSize == 0 ? (*this)(range) : OPENVDB_FOR_EACH(*this, range);
 
     mParent.mTracker.leafs().swapLeafBuffer(swapBuffer, grainSize == 0);
 

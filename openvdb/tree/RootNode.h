@@ -44,10 +44,6 @@
 #include <openvdb/util/NodeMasks.h> // for backward compatibility only (see readTopology())
 #include <openvdb/version.h>
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/parallel_for.h>
-#endif
-
 #include <map>
 #include <set>
 #include <sstream>

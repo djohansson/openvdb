@@ -43,10 +43,6 @@
 #include "PointMask.h" // GridCombinerOp
 #include "IndexFilter.h"
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/parallel_reduce.h>
-#endif
-
 #include <type_traits>
 #include <vector>
 
@@ -199,7 +195,8 @@ Index64 threadedFilterPointCount(   const PointDataTreeT& tree,
 
     typename tree::LeafManager<const PointDataTreeT> leafManager(tree);
     const PointCountOp pointCountOp(filter, inCoreOnly);
-    return tbb::parallel_reduce(leafManager.leafRange(), Index64(0), pointCountOp, PointCountOp::join);
+    return OPENVDB_REDUCE_SEED_JOIN(
+		pointCountOp, leafManager.leafRange(), Index64(0), PointCountOp::join);
 }
 
 

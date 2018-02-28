@@ -43,10 +43,6 @@
 #include "PointDataGrid.h"
 #include "IndexFilter.h"
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/combinable.h>
-#endif
-
 #include <type_traits>
 #include <vector>
 
@@ -97,8 +93,7 @@ namespace point_mask_internal {
 template<typename GridT>
 struct GridCombinerOp
 {
-    using CombinableT = typename tbb::combinable<GridT>;
-
+    using CombinableT = typename Combinable<GridT>;
     using TreeT = typename GridT::TreeType;
     using LeafT = typename TreeT::LeafNodeType;
     using ValueType = typename TreeT::ValueType;
@@ -258,13 +253,13 @@ inline typename GridT::Ptr convertPointsToScalar(
         MultiGroupFilter filter(includeGroups, excludeGroups, leaf->attributeSet());
         PointsToScalarOp<GridT, PointDataGridT, MultiGroupFilter> pointsToScalarOp(
             points, filter);
-        tbb::parallel_for(leafManager.leafRange(), pointsToScalarOp);
+		OPENVDB_FOR_EACH(pointsToScalarOp, leafManager.leafRange());
     }
     else {
         NullFilter filter;
         PointsToScalarOp<GridT, PointDataGridT, NullFilter> pointsToScalarOp(
             points, filter);
-        tbb::parallel_for(leafManager.leafRange(), pointsToScalarOp);
+		OPENVDB_FOR_EACH(pointsToScalarOp, leafManager.leafRange());
     }
 
     return grid;
@@ -313,13 +308,13 @@ inline typename GridT::Ptr convertPointsToScalar(
         MultiGroupFilter filter(includeGroups, excludeGroups, leaf->attributeSet());
         PointsToTransformedScalarOp<GridT, PointDataGridT, MultiGroupFilter> pointsToScalarOp(
             transform, pointsTransform, filter, combiner);
-        tbb::parallel_for(leafManager.leafRange(), pointsToScalarOp);
+		OPENVDB_FOR_EACH(pointsToScalarOp, leafManager.leafRange());
     }
     else {
         NullFilter filter;
         PointsToTransformedScalarOp<GridT, PointDataGridT, NullFilter> pointsToScalarOp(
             transform, pointsTransform, filter, combiner);
-        tbb::parallel_for(leafManager.leafRange(), pointsToScalarOp);
+		OPENVDB_FOR_EACH(pointsToScalarOp, leafManager.leafRange());
     }
 
     // combine the mask grids into one

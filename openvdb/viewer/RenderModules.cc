@@ -184,7 +184,7 @@ public:
     const ValueType& maxVoxel() const { return mMax; }
 
     inline MinMaxVoxel(const MinMaxVoxel<TreeType>&, tbb::split);
-    inline void operator()(const std::pair<size_t, size_t>&);
+    inline void operator()(const BlockedRange<size_t>&);
     inline void join(const MinMaxVoxel<TreeType>&);
 
 private:
@@ -216,7 +216,7 @@ template <class TreeType>
 void
 MinMaxVoxel<TreeType>::runParallel()
 {
-    tbb::parallel_reduce(mLeafArray.getRange(), *this);
+    OPENVDB_REDUCE(*this, mLeafArray.getRange());
 }
 
 
@@ -230,7 +230,7 @@ MinMaxVoxel<TreeType>::runSerial()
 
 template <class TreeType>
 inline void
-MinMaxVoxel<TreeType>::operator()(const std::pair<size_t, size_t>& range)
+MinMaxVoxel<TreeType>::operator()(const BlockedRange<size_t>& range)
 {
     typename TreeType::LeafNodeType::ValueOnCIter iter;
 
@@ -1020,10 +1020,10 @@ public:
 
     void runParallel()
     {
-        tbb::parallel_for(std::pair<size_t, size_t>(0, (mPoints.size() / 3)), *this);
+        tbb::parallel_for(BlockedRange<size_t>(0, (mPoints.size() / 3)), *this);
     }
 
-    inline void operator()(const std::pair<size_t, size_t>& range) const
+    inline void operator()(const BlockedRange<size_t>& range) const
     {
         openvdb::Coord ijk;
         openvdb::Vec3d pos, normal(0.0, -1.0, 0.0);

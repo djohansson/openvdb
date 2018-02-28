@@ -40,13 +40,13 @@
 #ifdef OPENVDB_USE_TBB
 #include <tbb/concurrent_hash_map.h>
 #include <tbb/task.h>
-#include <tbb/tbb_thread.h> // for tbb::this_tbb_thread::sleep()
 #endif
 #include <atomic>
 #include <mutex>
 #include <algorithm> // for std::max()
 #include <iostream>
 #include <map>
+#include <thread>
 #include <unordered_map>
 
 
@@ -222,16 +222,21 @@ struct Queue::Impl
 
     void enqueue(Task& task)
     {
-#ifdef OPENVDB_USE_TBB
-        tbb::tick_count start = tbb::tick_count::now();
-        while (!canEnqueue()) {
-            tbb::this_tbb_thread::sleep(tbb::tick_count::interval_t(0.5/*sec*/)); // WAT?
-            if ((tbb::tick_count::now() - start).seconds() > double(mTimeout)) {
+		using hires_clock = std::chrono::high_resolution_clock;
+		using time_point = hires_clock::time_point;
+
+		time_point start = hires_clock::now();
+        while (!canEnqueue())
+		{
+			using namespace std::chrono_literals;
+			std::this_thread::sleep_for(0.5s);
+            if (std::chrono::duration_cast<std::chrono::seconds>(hires_clock::now() - start).count() > double(mTimeout))
+			{
                 OPENVDB_THROW(RuntimeError,
                     "unable to queue I/O task; " << mTimeout << "-second time limit expired");
             }
         }
-#endif
+
         Queue::Notifier notify = std::bind(&Impl::setStatusWithNotification, this,
             std::placeholders::_1, std::placeholders::_2);
         task.setNotifier(notify);
@@ -269,15 +274,15 @@ Queue::Queue(Index32 capacity): mImpl(new Impl)
 
 Queue::~Queue()
 {
-#ifdef OPENVDB_USE_TBB
     // Wait for all queued tasks to complete (successfully or unsuccessfully).
     /// @todo Allow the queue to be destroyed while there are uncompleted tasks
     /// (e.g., by keeping a static registry of queues that also dispatches
     /// or blocks notifications)?
-    while (mImpl->mNumTasks > 0) {
-        tbb::this_tbb_thread::sleep(tbb::tick_count::interval_t(0.5/*sec*/));
+    while (mImpl->mNumTasks > 0)
+	{
+		using namespace std::chrono_literals;
+		std::this_thread::sleep_for(0.5s);
     }
-#endif
 }
 
 
@@ -309,23 +314,19 @@ Queue::status(Id id) const
 {
 #ifdef OPENVDB_USE_TBB
     Impl::StatusMap::const_accessor acc;
-    if (mImpl->mStatus.find(acc, id)) {
+    if (mImpl->mStatus.find(acc, id))
+#else
+	const auto acc = mImpl->mStatus.find(id);
+	if (acc != mImpl->mStatus.end())
+#endif
+	{
         const Status status = acc->second;
         if (status == SUCCEEDED || status == FAILED) {
             mImpl->mStatus.erase(acc);
         }
         return status;
     }
-#else
-	const auto it = mImpl->mStatus.find(id);
-	if (it != mImpl->mStatus.end()) {
-		const Status status = it->second;
-		if (status == SUCCEEDED || status == FAILED) {
-			mImpl->mStatus.erase(it);
-		}
-		return status;
-	}
-#endif
+
     return UNKNOWN;
 }
 

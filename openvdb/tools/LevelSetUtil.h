@@ -46,9 +46,6 @@
 #include <openvdb/external/brigand.hpp>
 
 #ifdef OPENVDB_USE_TBB
-#include <tbb/blocked_range.h>
-#include <tbb/parallel_for.h>
-#include <tbb/parallel_reduce.h>
 #include <tbb/parallel_sort.h>
 #endif
 
@@ -224,7 +221,7 @@ struct MaskInteriorVoxels {
     {
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) const {
+    void operator()(const BlockedRange<size_t>& range) const {
 
         BoolLeafNodeType * maskNodePt = nullptr;
 
@@ -267,7 +264,7 @@ struct MaskInteriorTiles {
     MaskInteriorTiles(ValueType isovalue, const TreeType& tree, InternalNodeType ** maskNodes)
         : mTree(&tree), mMaskNodes(maskNodes), mIsovalue(isovalue) { }
 
-    void operator()(const std::pair<size_t, size_t>& range) const {
+    void operator()(const BlockedRange<size_t>& range) const {
         tree::ValueAccessor<const TreeType> acc(*mTree);
         for (size_t n = range.begin(), N = range.end(); n < N; ++n) {
             typename InternalNodeType::ValueAllIter it = mMaskNodes[n]->beginValueAll();
@@ -301,6 +298,7 @@ struct PopulateTree {
     {
     }
 
+#ifdef OPENVDB_USE_TBB
     PopulateTree(PopulateTree& rhs, tbb::split)
         : mNewTree(rhs.mNewTree.background())
         , mTreePt(&mNewTree)
@@ -308,8 +306,9 @@ struct PopulateTree {
         , mNodeIndexMap(rhs.mNodeIndexMap)
     {
     }
+#endif
 
-    void operator()(const std::pair<size_t, size_t>& range) {
+    void operator()(const BlockedRange<size_t>& range) {
 
         tree::ValueAccessor<TreeType> acc(*mTreePt);
 
@@ -349,7 +348,7 @@ struct LabelBoundaryVoxels {
     {
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) const {
+    void operator()(const BlockedRange<size_t>& range) const {
 
         CharLeafNodeType * maskNodePt = nullptr;
 
@@ -390,7 +389,7 @@ struct FlipRegionSign {
 
     FlipRegionSign(LeafNodeType ** nodes) : mNodes(nodes) { }
 
-    void operator()(const std::pair<size_t, size_t>& range) const {
+    void operator()(const BlockedRange<size_t>& range) const {
         for (size_t n = range.begin(), N = range.end(); n < N; ++n) {
             ValueType* values = const_cast<ValueType*>(&mNodes[n]->getValue(0));
             for (Index i = 0; i < LeafNodeType::SIZE; ++i) {
@@ -414,13 +413,15 @@ struct FindMinVoxelValue {
     {
     }
 
+#ifdef OPENVDB_USE_TBB
     FindMinVoxelValue(FindMinVoxelValue& rhs, tbb::split)
         : minValue(std::numeric_limits<ValueType>::max())
         , mNodes(rhs.mNodes)
     {
     }
+#endif
 
-    void operator()(const std::pair<size_t, size_t>& range) {
+    void operator()(const BlockedRange<size_t>& range) {
         for (size_t n = range.begin(), N = range.end(); n < N; ++n) {
             const ValueType* data = mNodes[n]->buffer().data();
             for (Index i = 0; i < LeafNodeType::SIZE; ++i) {
@@ -448,13 +449,15 @@ struct FindMinTileValue {
     {
     }
 
+#ifdef OPENVDB_USE_TBB
     FindMinTileValue(FindMinTileValue& rhs, tbb::split)
         : minValue(std::numeric_limits<ValueType>::max())
         , mNodes(rhs.mNodes)
     {
     }
+#endif
 
-    void operator()(const std::pair<size_t, size_t>& range) {
+    void operator()(const BlockedRange<size_t>& range) {
         for (size_t n = range.begin(), N = range.end(); n < N; ++n) {
             typename InternalNodeType::ValueAllCIter it = mNodes[n]->beginValueAll();
             for (; it; ++it) {
@@ -481,7 +484,7 @@ struct SDFVoxelsToFogVolume {
     {
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) const {
+    void operator()(const BlockedRange<size_t>& range) const {
 
         for (size_t n = range.begin(), N = range.end(); n < N; ++n) {
 
@@ -512,7 +515,7 @@ struct SDFTilesToFogVolume {
     SDFTilesToFogVolume(const TreeType& tree, InternalNodeType ** nodes)
         : mTree(&tree), mNodes(nodes) { }
 
-    void operator()(const std::pair<size_t, size_t>& range) const {
+    void operator()(const BlockedRange<size_t>& range) const {
 
         using ValueType = typename TreeType::ValueType;
         tree::ValueAccessor<const TreeType> acc(*mTree);
@@ -551,7 +554,7 @@ struct FillMaskBoundary {
     {
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) const {
+    void operator()(const BlockedRange<size_t>& range) const {
 
         tree::ValueAccessor<const BoolTreeType> maskAcc(*mFillMask);
         tree::ValueAccessor<const TreeType> distAcc(*mTree);
@@ -1024,14 +1027,15 @@ computeEnclosedRegionMask(const TreeType& tree, typename TreeType::ValueType iso
     // create mask leafnodes
     std::unique_ptr<CharLeafNodeType*[]> maskNodes(new CharLeafNodeType*[numLeafNodes]);
 
-    tbb::parallel_for(std::pair<size_t, size_t>(0, numLeafNodes),
-        LabelBoundaryVoxels<LeafNodeType>(isovalue, &nodes[0], maskNodes.get()));
+	OPENVDB_FOR_EACH(
+		LabelBoundaryVoxels<LeafNodeType>(isovalue, &nodes[0], maskNodes.get()),
+		BlockedRange<size_t>(0, numLeafNodes));
 
     // create mask grid
     typename CharTreeType::Ptr maskTree(new CharTreeType(1));
 
     PopulateTree<CharTreeType> populate(*maskTree, maskNodes.get(), &leafnodeCount[0], 1);
-    tbb::parallel_reduce(std::pair<size_t, size_t>(0, numInternalNodes), populate);
+    OPENVDB_REDUCE(populate, BlockedRange<size_t>(0, numInternalNodes));
 
     // optionally evaluate the fill mask
 
@@ -1045,9 +1049,9 @@ computeEnclosedRegionMask(const TreeType& tree, typename TreeType::ValueType iso
         std::unique_ptr<BoolLeafNodeType*[]> boundaryMaskNodes(
             new BoolLeafNodeType*[fillMaskNodes.size()]);
 
-        tbb::parallel_for(std::pair<size_t, size_t>(0, fillMaskNodes.size()),
-            FillMaskBoundary<TreeType>(tree, isovalue, *fillMask, &fillMaskNodes[0],
-                boundaryMaskNodes.get()));
+		OPENVDB_FOR_EACH(
+			FillMaskBoundary<TreeType>(tree, isovalue, *fillMask, &fillMaskNodes[0], boundaryMaskNodes.get()),
+			BlockedRange<size_t>(0, fillMaskNodes.size()));
 
         tree::ValueAccessor<CharTreeType> maskAcc(*maskTree);
 
@@ -1080,12 +1084,14 @@ computeEnclosedRegionMask(const TreeType& tree, typename TreeType::ValueType iso
     tools::traceExteriorBoundaries(*maskTree);
 
     // flip voxel sign to negative inside and positive outside.
-    tbb::parallel_for(std::pair<size_t, size_t>(0, numLeafNodes),
-        FlipRegionSign<CharLeafNodeType>(maskNodes.get()));
+    OPENVDB_FOR_EACH(
+		FlipRegionSign<CharLeafNodeType>(maskNodes.get()),
+		BlockedRange<size_t>(0, numLeafNodes));
 
     if (!extraMaskNodes.empty()) {
-        tbb::parallel_for(std::pair<size_t, size_t>(0, extraMaskNodes.size()),
-            FlipRegionSign<CharLeafNodeType>(&extraMaskNodes[0]));
+		OPENVDB_FOR_EACH(
+			FlipRegionSign<CharLeafNodeType>(&extraMaskNodes[0]),
+			BlockedRange<size_t>(0, extraMaskNodes.size()));
     }
 
     // propagate sign information into tile region
@@ -1151,23 +1157,25 @@ computeInteriorMask(const TreeType& tree, typename TreeType::ValueType iso)
     // create mask leafnodes
     std::unique_ptr<BoolLeafNodeType*[]> maskNodes(new BoolLeafNodeType*[numLeafNodes]);
 
-    tbb::parallel_for(std::pair<size_t, size_t>(0, numLeafNodes),
-        MaskInteriorVoxels<LeafNodeType>(iso, &nodes[0], maskNodes.get()));
+	OPENVDB_FOR_EACH(
+		MaskInteriorVoxels<LeafNodeType>(iso, &nodes[0], maskNodes.get()),
+		BlockedRange<size_t>(0, numLeafNodes));
 
 
     // create mask grid
     typename BoolTreeType::Ptr maskTree(new BoolTreeType(false));
 
     PopulateTree<BoolTreeType> populate(*maskTree, maskNodes.get(), &leafnodeCount[0], false);
-    tbb::parallel_reduce(std::pair<size_t, size_t>(0, numInternalNodes), populate);
+	OPENVDB_REDUCE(populate, BlockedRange<size_t>(0, numInternalNodes));
 
 
     // evaluate tile values
     std::vector<BoolInternalNodeType*> internalMaskNodes;
     maskTree->getNodes(internalMaskNodes);
 
-    tbb::parallel_for(std::pair<size_t, size_t>(0, internalMaskNodes.size()),
-        MaskInteriorTiles<TreeType, BoolInternalNodeType>(iso, tree, &internalMaskNodes[0]));
+	OPENVDB_FOR_EACH(
+		(MaskInteriorTiles<TreeType, BoolInternalNodeType>(iso, tree, &internalMaskNodes[0])),
+		BlockedRange<size_t>(0, internalMaskNodes.size()));
 
     tree::ValueAccessor<const TreeType> acc(tree);
 
@@ -1206,6 +1214,7 @@ struct MaskIsovalueCrossingVoxels
     {
     }
 
+#ifdef OPENVDB_USE_TBB
     MaskIsovalueCrossingVoxels(MaskIsovalueCrossingVoxels& rhs, tbb::split)
         : mInputAccessor(rhs.mInputAccessor.tree())
         , mInputNodes(rhs.mInputNodes)
@@ -1214,8 +1223,9 @@ struct MaskIsovalueCrossingVoxels
         , mIsovalue(rhs.mIsovalue)
     {
     }
+#endif
 
-    void operator()(const std::pair<size_t, size_t>& range) {
+    void operator()(const BlockedRange<size_t>& range) {
 
         const InputValueType iso = mIsovalue;
         Coord ijk(0, 0, 0);
@@ -1408,7 +1418,7 @@ struct SegmentNodeMask
     {
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) const {
+    void operator()(const BlockedRange<size_t>& range) const {
         for (size_t n = range.begin(), N = range.end(); n < N; ++n) {
             NodeType& node = *mNodes[n];
             nodeMaskSegmentation(node, mNodeMaskArray[n]);
@@ -1438,7 +1448,7 @@ struct ConnectNodeMaskSegments
     {
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) const {
+    void operator()(const BlockedRange<size_t>& range) const {
 
         tree::ValueAccessor<const TreeType> acc(*mTree);
 
@@ -1609,17 +1619,19 @@ struct MaskSegmentGroup
     {
     }
 
+#ifdef OPENVDB_USE_TBB
     MaskSegmentGroup(const MaskSegmentGroup& rhs, tbb::split)
         : mSegments(rhs.mSegments)
         , mTree(new TreeType(false))
     {
     }
+#endif
 
     TreeTypePtr& mask() { return mTree; }
 
     void join(MaskSegmentGroup& rhs) { mTree->merge(*rhs.mTree); }
 
-    void operator()(const std::pair<size_t, size_t>& range) {
+    void operator()(const BlockedRange<size_t>& range) {
 
         tree::ValueAccessor<TreeType> acc(*mTree);
 
@@ -1660,6 +1672,7 @@ struct ExpandLeafNodeRegion
     {
     }
 
+#ifdef OPENVDB_USE_TBB
     ExpandLeafNodeRegion(const ExpandLeafNodeRegion& rhs, tbb::split)
         : mDistTree(rhs.mDistTree)
         , mMaskTree(rhs.mMaskTree)
@@ -1667,12 +1680,13 @@ struct ExpandLeafNodeRegion
         , mNewMaskTree(false)
     {
     }
+#endif
 
     BoolTreeType& newMaskTree() { return mNewMaskTree; }
 
     void join(ExpandLeafNodeRegion& rhs) { mNewMaskTree.merge(rhs.mNewMaskTree); }
 
-    void operator()(const std::pair<size_t, size_t>& range) {
+    void operator()(const BlockedRange<size_t>& range) {
 
         using NodeType = LeafNodeType;
 
@@ -1799,7 +1813,7 @@ struct FillLeafNodeVoxels
     {
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) const {
+    void operator()(const BlockedRange<size_t>& range) const {
 
         tree::ValueAccessor<const TreeType> distAcc(*mTree);
 
@@ -1900,7 +1914,7 @@ struct ExpandNarrowbandMask
     {
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) const {
+    void operator()(const BlockedRange<size_t>& range) const {
 
         const TreeType& distTree = *mTree;
         std::vector<BoolLeafNodeType*> nodes;
@@ -1917,14 +1931,14 @@ struct ExpandNarrowbandMask
                 candidateMask.getNodes(nodes);
                 if (nodes.empty()) break;
 
-                const std::pair<size_t, size_t> nodeRange(0, nodes.size());
+                const BlockedRange<size_t> nodeRange(0, nodes.size());
 
-                tbb::parallel_for(nodeRange, FillLeafNodeVoxels<TreeType>(distTree, nodes));
+                OPENVDB_FOR_EACH(FillLeafNodeVoxels<TreeType>(distTree, nodes), nodeRange);
 
                 narrowBandMask.topologyUnion(candidateMask);
 
                 ExpandLeafNodeRegion<TreeType> op(distTree, narrowBandMask, nodes);
-                tbb::parallel_reduce(nodeRange, op);
+				OPENVDB_REDUCE(op, nodeRange);
 
                 if (op.newMaskTree().empty()) break;
 
@@ -1962,7 +1976,7 @@ struct FloodFillSign
 
             if (!nodes.empty()) {
                 FindMinTileValue<InternalNodeType> minOp(&nodes[0]);
-                tbb::parallel_reduce(std::pair<size_t, size_t>(0, nodes.size()), minOp);
+				OPENVDB_REDUCE(minOp, BlockedRange<size_t>(0, nodes.size()));
                 minSDFValue = std::min(minSDFValue, minOp.minValue);
             }
         }
@@ -1972,7 +1986,7 @@ struct FloodFillSign
             tree.getNodes(nodes);
             if (!nodes.empty()) {
                 FindMinVoxelValue<LeafNodeType> minOp(&nodes[0]);
-                tbb::parallel_reduce(std::pair<size_t, size_t>(0, nodes.size()), minOp);
+				OPENVDB_REDUCE(minOp, BlockedRange<size_t>(0, nodes.size()));
                 minSDFValue = std::min(minSDFValue, minOp.minValue);
             }
         }
@@ -1980,7 +1994,7 @@ struct FloodFillSign
         mMinValue = minSDFValue;
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) const {
+    void operator()(const BlockedRange<size_t>& range) const {
         const ValueType interiorValue = -std::abs(mMinValue);
         const ValueType exteriorValue = std::abs(mTree->background());
         for (size_t n = range.begin(), N = range.end(); n < N; ++n) {
@@ -2015,7 +2029,7 @@ struct MaskedCopy
     {
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) const {
+    void operator()(const BlockedRange<size_t>& range) const {
 
         std::vector<const BoolLeafNodeType*> nodes;
 
@@ -2027,7 +2041,7 @@ struct MaskedCopy
             mask.getNodes(nodes);
 
             Copy op(*mTree, nodes);
-            tbb::parallel_reduce(std::pair<size_t, size_t>(0, nodes.size()), op);
+            OPENVDB_REDUCE(op, BlockedRange<size_t>(0, nodes.size()));
             mSegments[n] = op.outputTree();
         }
     }
@@ -2042,18 +2056,20 @@ private:
         {
         }
 
+#ifdef OPENVDB_USE_TBB
         Copy(const Copy& rhs, tbb::split)
             : mInputTree(rhs.mInputTree)
             , mMaskNodes(rhs.mMaskNodes)
             , mOutputTreePtr(new TreeType(mInputTree->background()))
         {
         }
+#endif
 
         TreeTypePtr& outputTree() { return mOutputTreePtr; }
 
         void join(Copy& rhs) { mOutputTreePtr->merge(*rhs.mOutputTreePtr); }
 
-        void operator()(const std::pair<size_t, size_t>& range) {
+        void operator()(const BlockedRange<size_t>& range) {
 
             tree::ValueAccessor<const TreeType> inputAcc(*mInputTree);
             tree::ValueAccessor<TreeType>       outputAcc(*mOutputTreePtr);
@@ -2110,7 +2126,7 @@ struct ComputeActiveVoxelCount
     {
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) const {
+    void operator()(const BlockedRange<size_t>& range) const {
         for (size_t n = range.begin(), N = range.end(); n < N; ++n) {
             mCountArray[n] = mSegments[n]->activeVoxelCount();
         }
@@ -2227,13 +2243,13 @@ sdfToFogVolume(GridType& grid, typename GridType::ValueType cutoffDistance)
 
         {
             level_set_util_internal::FindMinTileValue<InternalNodeType> minOp(&internalNodes[0]);
-            tbb::parallel_reduce(std::pair<size_t, size_t>(0, internalNodes.size()), minOp);
+            OPENVDB_REDUCE(minOp, BlockedRange<size_t>(0, internalNodes.size()));
             minSDFValue = std::min(minSDFValue, minOp.minValue);
         }
 
         if (minSDFValue > ValueType(0.0)) {
             level_set_util_internal::FindMinVoxelValue<LeafNodeType> minOp(&nodes[0]);
-            tbb::parallel_reduce(std::pair<size_t, size_t>(0, nodes.size()), minOp);
+			OPENVDB_REDUCE(minOp, BlockedRange<size_t>(0, nodes.size()));
             minSDFValue = std::min(minSDFValue, minOp.minValue);
         }
 
@@ -2244,23 +2260,24 @@ sdfToFogVolume(GridType& grid, typename GridType::ValueType cutoffDistance)
     // Transform voxel values and delete leafnodes that are uniformly zero after the transformation.
     // (Positive values are set to zero with inactive state and negative values are remapped
     // from zero to one with active state.)
-    tbb::parallel_for(std::pair<size_t, size_t>(0, nodes.size()),
-        level_set_util_internal::SDFVoxelsToFogVolume<LeafNodeType>(&nodes[0], cutoffDistance));
+    OPENVDB_FOR_EACH(
+		level_set_util_internal::SDFVoxelsToFogVolume<LeafNodeType>(&nodes[0], cutoffDistance),
+		BlockedRange<size_t>(0, nodes.size()));
 
     // Populate a new tree with the remaining leafnodes
     typename TreeType::Ptr newTree(new TreeType(ValueType(0.0)));
 
     level_set_util_internal::PopulateTree<TreeType> populate(
         *newTree, &nodes[0], &leafnodeCount[0], 0);
-    tbb::parallel_reduce(std::pair<size_t, size_t>(0, numInternalNodes), populate);
+	OPENVDB_REDUCE(populate, BlockedRange<size_t>(0, numInternalNodes));
 
     // Transform tile values (Negative valued tiles are set to 1.0 with active state.)
     std::vector<InternalNodeType*> internalNodes;
     newTree->getNodes(internalNodes);
 
-    tbb::parallel_for(std::pair<size_t, size_t>(0, internalNodes.size()),
-        level_set_util_internal::SDFTilesToFogVolume<TreeType, InternalNodeType>(
-            tree, &internalNodes[0]));
+	OPENVDB_FOR_EACH(
+		(level_set_util_internal::SDFTilesToFogVolume<TreeType, InternalNodeType>(tree, &internalNodes[0])),
+		BlockedRange<size_t>(0, internalNodes.size()));
 
     {
         tree::ValueAccessor<const TreeType> acc(tree);
@@ -2351,7 +2368,7 @@ extractIsosurfaceMask(const GridOrTreeType& volume, typename GridOrTreeType::Val
     typename BoolTreeType::Ptr mask(new BoolTreeType(false));
 
     level_set_util_internal::MaskIsovalueCrossingVoxels<TreeType> op(tree, nodes, *mask, isovalue);
-    tbb::parallel_reduce(std::pair<size_t, size_t>(0, nodes.size()), op);
+	OPENVDB_REDUCE(op, BlockedRange<size_t>(0, nodes.size()));
 
     return level_set_util_internal::GridOrTreeConstructor<GridOrTreeType>::constructMask(
         volume, mask);
@@ -2397,16 +2414,16 @@ extractActiveVoxelSegmentMasks(const GridOrTreeType& volume,
     std::unique_ptr<NodeMaskSegmentPtrVector[]> nodeSegmentArray(
         new NodeMaskSegmentPtrVector[leafnodes.size()]);
 
-    tbb::parallel_for(std::pair<size_t, size_t>(0, leafnodes.size()),
-        level_set_util_internal::SegmentNodeMask<BoolLeafNodeType>(
-            leafnodes, nodeSegmentArray.get()));
+    OPENVDB_FOR_EACH(
+		level_set_util_internal::SegmentNodeMask<BoolLeafNodeType>(leafnodes, nodeSegmentArray.get()),
+		BlockedRange<size_t>(0, leafnodes.size()));
 
 
     // 2. Compute segment connectivity
 
-    tbb::parallel_for(std::pair<size_t, size_t>(0, leafnodes.size()),
-        level_set_util_internal::ConnectNodeMaskSegments<BoolTreeType, BoolLeafNodeType>(
-            topologyMask, nodeSegmentArray.get()));
+	OPENVDB_FOR_EACH(
+		(level_set_util_internal::ConnectNodeMaskSegments<BoolTreeType, BoolLeafNodeType>(topologyMask, nodeSegmentArray.get())),
+		BlockedRange<size_t>(0, leafnodes.size()));
 
     topologyMask.clear();
 
@@ -2478,7 +2495,7 @@ extractActiveVoxelSegmentMasks(const GridOrTreeType& volume,
             NodeMaskSegmentRawPtrVector& segmentGroup = nodeSegmentGroups[n];
 
             level_set_util_internal::MaskSegmentGroup<BoolTreeType> op(segmentGroup);
-            tbb::parallel_reduce(std::pair<size_t, size_t>(0, segmentGroup.size()), op);
+			OPENVDB_REDUCE(op, BlockedRange<size_t>(0, segmentGroup.size()));
 
             masks.push_back(
                 level_set_util_internal::GridOrTreeConstructor<GridOrTreeType>::constructMask(
@@ -2498,13 +2515,22 @@ extractActiveVoxelSegmentMasks(const GridOrTreeType& volume,
             segmentOrderArray[n] = n;
         }
 
-        tbb::parallel_for(std::pair<size_t, size_t>(0, segmentCount),
-            level_set_util_internal::ComputeActiveVoxelCount<BoolTreePtrType>(
-                masks, voxelCountArray.get()));
+		OPENVDB_FOR_EACH(
+			level_set_util_internal::ComputeActiveVoxelCount<BoolTreePtrType>(masks, voxelCountArray.get()),
+			BlockedRange<size_t>(0, segmentCount));
 
         size_t *begin = segmentOrderArray.get();
-        tbb::parallel_sort(begin, begin + masks.size(), level_set_util_internal::GreaterCount(
-            voxelCountArray.get()));
+#ifdef OPENVDB_USE_TBB
+        tbb::parallel_sort(
+			begin, 
+			begin + masks.size(),
+			level_set_util_internal::GreaterCount(voxelCountArray.get()));
+#else
+		std::sort(
+			begin,
+			begin + masks.size(),
+			level_set_util_internal::GreaterCount(voxelCountArray.get()));
+#endif
 
         std::vector<BoolTreePtrType> orderedMasks;
         orderedMasks.reserve(masks.size());
@@ -2546,14 +2572,14 @@ segmentActiveVoxels(const GridOrTreeType& volume,
         return;
     }
 
-    const std::pair<size_t, size_t> segmentRange(0, numSegments);
+    const BlockedRange<size_t> segmentRange(0, numSegments);
 
     // 2. Export segments
     std::vector<TreePtrType> outputSegmentArray(numSegments);
 
-    tbb::parallel_for(segmentRange,
-        level_set_util_internal::MaskedCopy<TreeType>(inputTree, outputSegmentArray,
-            maskSegmentArray));
+	OPENVDB_FOR_EACH(
+		level_set_util_internal::MaskedCopy<TreeType>(inputTree, outputSegmentArray,maskSegmentArray),
+		segmentRange);
 
     for (size_t n = 0, N = numSegments; n < N; ++n) {
         segments.push_back(
@@ -2592,21 +2618,24 @@ segmentSDF(const GridOrTreeType& volume, std::vector<typename GridOrTreeType::Pt
         return;
     }
 
-    const std::pair<size_t, size_t> segmentRange(0, numSegments);
+    const BlockedRange<size_t> segmentRange(0, numSegments);
 
 
     // 3. Expand zero crossing mask to capture sdf narrow band
-    tbb::parallel_for(segmentRange,
-        level_set_util_internal::ExpandNarrowbandMask<TreeType>(inputTree, maskSegmentArray));
+	OPENVDB_FOR_EACH(
+		level_set_util_internal::ExpandNarrowbandMask<TreeType>(inputTree, maskSegmentArray),
+		segmentRange);
 
     // 4. Export sdf segments
     std::vector<TreePtrType> outputSegmentArray(numSegments);
 
-    tbb::parallel_for(segmentRange, level_set_util_internal::MaskedCopy<TreeType>(
-        inputTree, outputSegmentArray, maskSegmentArray));
+	OPENVDB_FOR_EACH(
+		level_set_util_internal::MaskedCopy<TreeType>(inputTree, outputSegmentArray, maskSegmentArray),
+		segmentRange);
 
-    tbb::parallel_for(segmentRange,
-        level_set_util_internal::FloodFillSign<TreeType>(inputTree, outputSegmentArray));
+	OPENVDB_FOR_EACH(
+		level_set_util_internal::FloodFillSign<TreeType>(inputTree, outputSegmentArray),
+		segmentRange);
 
 
     for (size_t n = 0, N = numSegments; n < N; ++n) {

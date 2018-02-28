@@ -54,11 +54,6 @@
 #include <openvdb/tree/LeafNode.h>
 #include <openvdb/tree/Tree.h>
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/blocked_range.h>
-#include <tbb/parallel_for.h>
-#endif
-
 #include <atomic>
 #include <algorithm> // for std::min(), std::max()
 #include <cmath> // for std::sqrt()
@@ -385,7 +380,9 @@ struct ValidPartitioningOp
     void operator()(LeafT &leaf, size_t /*leafIndex*/) const
     {
         if ((*mHasChanged)) {
+#ifdef OPENVDB_USE_TBB
             tbb::task::self().cancel_group_execution();
+#endif
             return;
         }
 
@@ -441,12 +438,12 @@ struct PopulateLeafNodesOp
     {
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) const {
+    void operator()(const BlockedRange<size_t>& range) const {
 
         using VoxelOffsetT = typename Partitioner::VoxelOffsetType;
 
         size_t maxPointCount = 0;
-        for (size_t n = range.begin(), N = range.end(); n != N; ++n) {
+        for (size_t n = range.first, N = range.second; n != N; ++n) {
             maxPointCount = std::max(maxPointCount, mPartitioner->indices(n).size());
         }
 
@@ -458,7 +455,7 @@ struct PopulateLeafNodesOp
 
         VoxelOffsetT const * const voxelOffsets = mPartitioner->voxelOffsets().get();
 
-        for (size_t n = range.begin(), N = range.end(); n != N; ++n) {
+        for (size_t n = range.first, N = range.second; n != N; ++n) {
 
             LeafNodeT* node = new LeafNodeT();
             node->setOrigin(mPartitioner->origin(n));
@@ -539,8 +536,8 @@ constructPointTree(TreeType& tree, const math::Transform& xform, const PointArra
         leafNodeCount = partitioner.size();
         leafNodes.reset(new LeafType*[leafNodeCount]);
 
-        const std::pair<size_t, size_t> range(0, leafNodeCount);
-        tbb::parallel_for(range, PopulateLeafNodesOp<LeafType>(leafNodes, partitioner));
+        const BlockedRange<size_t> range(0, leafNodeCount);
+		OPENVDB_FOR_EACH(PopulateLeafNodesOp<LeafType>(leafNodes, partitioner), range);
     }
 
     tree::ValueAccessor<TreeType> acc(tree);

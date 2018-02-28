@@ -135,7 +135,7 @@ struct OffsetAndMinComp
     {
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) const
+    void operator()(const BlockedRange<size_t>& range) const
     {
         typedef typename LeafNodeType::ValueOnIter Iterator;
 
@@ -197,7 +197,7 @@ smoothLevelSet(GridType& grid, int iterations, int halfBandWidthInVoxels, Interr
 
     const ValueType offset = ValueType(double(0.5) * grid.transform().voxelSize()[0]);
 
-    tbb::parallel_for(std::pair<size_t, size_t>(0, nodes.size()),
+    tbb::parallel_for(BlockedRange<size_t>(0, nodes.size()),
         OffsetAndMinComp<TreeType>(nodes, filterGrid.tree(), -offset));
 
     // Clean up any damanage that was done by the min operation

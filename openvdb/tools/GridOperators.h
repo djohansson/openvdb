@@ -43,10 +43,6 @@
 #include <openvdb/tree/ValueAccessor.h>
 #include "ValueTransformer.h" // for tools::foreach()
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/parallel_for.h>
-#endif
-
 
 namespace openvdb {
 OPENVDB_USE_VERSION_NAMESPACE
@@ -376,7 +372,7 @@ public:
         LeafManagerT leafManager(*tree);
 
         if (threaded) {
-            tbb::parallel_for(leafManager.leafRange(), *this);
+            OPENVDB_FOR_EACH(*this, leafManager.leafRange());
         } else {
             (*this)(leafManager.leafRange());
         }
@@ -413,7 +409,9 @@ public:
     /// TBB threads only!
     void operator()(const typename LeafManagerT::LeafRange& range) const
     {
+#ifdef OPENVDB_USE_TBB
         if (util::wasInterrupted(mInterrupt)) tbb::task::self().cancel_group_execution();
+#endif
 
         for (typename LeafManagerT::LeafRange::Iterator leaf=range.begin(); leaf; ++leaf) {
             for (typename OutLeafT::ValueOnIter value=leaf->beginValueOn(); value; ++value) {

@@ -32,15 +32,12 @@
 #define OPENVDB_UTIL_CPUTIMER_HAS_BEEN_INCLUDED
 
 #include <openvdb/version.h>
-#include <string>
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/tick_count.h>
-#endif
-
+#include <chrono>
 #include <iostream>// for std::cerr
 #include <sstream>// for ostringstream
 #include <iomanip>//for setprecision
+#include <string>
 
 namespace openvdb {
 OPENVDB_USE_VERSION_NAMESPACE
@@ -68,10 +65,13 @@ namespace util {
 /// @endcode
 class CpuTimer
 {
+	using hires_clock = std::chrono::high_resolution_clock;
+	using time_point = hires_clock::time_point;
+
 public:
 
     /// @brief Initiate timer
-    CpuTimer() : mT0(tbb::tick_count::now()) {}
+    CpuTimer() : mT0(hires_clock::now()) {}
 
     /// @brief Prints message and re-start timer.
     ///
@@ -81,7 +81,7 @@ public:
     /// @brief Start timer.
     ///
     /// @note Should normally be followed by a call to time()
-    inline void start() { mT0 = tbb::tick_count::now(); }
+    inline void start() { mT0 = hires_clock::now(); }
 
     /// @brief Print message and re-start timer.
     ///
@@ -104,8 +104,7 @@ public:
     /// Return Time diference in milliseconds since construction or start was called.
     inline double delta() const
     {
-        tbb::tick_count::interval_t dt = tbb::tick_count::now() - mT0;
-        return 1000.0*dt.seconds();
+        return std::chrono::duration_cast<std::chrono::milliseconds>(hires_clock::now() - mT0).count();
     }
 
     /// @brief Print time in milliseconds since construction or start was called.
@@ -119,7 +118,7 @@ public:
 
 private:
 
-    tbb::tick_count mT0;
+	time_point mT0;
 };// CpuTimer
 
 } // namespace util

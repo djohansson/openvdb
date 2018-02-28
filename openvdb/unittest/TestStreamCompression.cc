@@ -51,10 +51,6 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <boost/version.hpp> // for BOOST_VERSION
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/atomic.h>
-#endif
-
 #ifdef _MSC_VER
 #include <boost/interprocess/detail/os_file_functions.hpp> // open_existing_file(), close_file()
 // boost::interprocess::detail was renamed to boost::interprocess::ipcdetail in Boost 1.48.

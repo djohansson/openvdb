@@ -56,10 +56,7 @@
 #include "ValueTransformer.h" // for foreach()
 
 #ifdef OPENVDB_USE_TBB
-#include <tbb/tbb_thread.h>
 #include <tbb/task_scheduler_init.h>
-#include <tbb/enumerable_thread_specific.h>
-#include <tbb/parallel_for.h>
 #endif
 
 #include <type_traits>
@@ -393,7 +390,7 @@ protected:
     };// LeafCache
 
     struct ErodeVoxelsOp {
-        typedef std::pair<size_t, size_t> RangeT;
+        typedef BlockedRange<size_t> RangeT;
         ErodeVoxelsOp(std::vector<MaskType>& masks, ManagerType& manager)
             : mTask(0), mSavedMasks(masks) , mManager(manager) {}
         void runParallel(NearestNeighbors nn);
@@ -414,7 +411,7 @@ protected:
 
         void save() { mSaveMasks = true; tbb::parallel_for(mManager.getRange(), *this); }
         void update() { mSaveMasks = false; tbb::parallel_for(mManager.getRange(), *this); }
-        void operator()(const std::pair<size_t, size_t>& range) const
+        void operator()(const BlockedRange<size_t>& range) const
         {
             if (mSaveMasks) {
                 for (size_t i = range.begin(); i < range.end(); ++i) {
@@ -436,7 +433,7 @@ protected:
         UpdateMasks(const std::vector<MaskType>& masks, ManagerType& manager)
             : mMasks(masks), mManager(manager) {}
         void update() { tbb::parallel_for(mManager.getRange(), *this); }
-        void operator()(const std::pair<size_t, size_t>& r) const {
+        void operator()(const BlockedRange<size_t>& r) const {
             for (size_t i=r.begin(); i<r.end(); ++i) mManager.leaf(i).setValueMask(mMasks[i]);
         }
         const std::vector<MaskType>& mMasks;
@@ -445,8 +442,8 @@ protected:
     struct CopyMasks {
         CopyMasks(std::vector<MaskType>& masks, const ManagerType& manager)
             : mMasks(masks), mManager(manager) {}
-        void copy() { tbb::parallel_for(mManager.getRange(), *this); }
-        void operator()(const std::pair<size_t, size_t>& r) const {
+        void copy() { OPENVDB_FOR_EACH(*this, mManager.getRange()); }
+        void operator()(const BlockedRange<size_t>& r) const {
             for (size_t i=r.begin(); i<r.end(); ++i) mMasks[i]=mManager.leaf(i).getValueMask();
         }
         std::vector<MaskType>& mMasks;
@@ -996,7 +993,7 @@ template<typename TreeT>
 class DilationOp
 {
     typedef typename TreeT::template ValueConverter<ValueMask>::Type MaskT;
-    typedef tbb::enumerable_thread_specific<MaskT>                   PoolT;
+    typedef EnumerableThreadSpecific<MaskT>							 PoolT;
     typedef typename MaskT::LeafNodeType                             LeafT;
 
     // Very light-weight member data
@@ -1011,14 +1008,19 @@ public:
         : mIter(iterations), mNN(nn), mPool(nullptr), mLeafs(nullptr)
     {
         const size_t numLeafs = this->init( tree, mode );
-        const size_t numThreads = size_t(tbb::task_scheduler_init::default_num_threads());
+		const size_t numThreads =
+#ifdef OPENVDB_USE_TBB
+			size_t(tbb::task_scheduler_init::default_num_threads());
+#else
+			1;
+#endif
         const size_t grainSize = math::Max(size_t(1), numLeafs/(2*numThreads));
 
         MaskT mask;
         PoolT pool(mask);// Scoped thread-local storage of mask trees
         mPool = &pool;
 
-        tbb::parallel_for(tbb::blocked_range<LeafT**>(mLeafs, mLeafs+numLeafs, grainSize), *this);
+        OPENVDB_FOR_EACH(*this, BlockedRange<LeafT**>(mLeafs, mLeafs + numLeafs, grainSize));
 
         delete [] mLeafs;// no more need for the array of leaf node pointers
 
@@ -1031,7 +1033,7 @@ public:
     }
 
     // This is required by tbb and should never be called directly
-    void operator()(const tbb::blocked_range<LeafT**> &r) const
+    void operator()(const BlockedRange<LeafT**> &r) const
     {
         MaskT mask;// thread-local temporary mask tree
         for (LeafT** it=r.begin(); it!=r.end(); ++it) mask.addLeaf( *it );

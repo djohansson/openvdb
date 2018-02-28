@@ -44,12 +44,12 @@
 #include <openvdb/math/Operators.h>
 #include <openvdb/util/NullInterrupter.h>
 
+#include <algorithm>
+#include <type_traits>
+
 #ifdef OPENVDB_USE_TBB
-#include <tbb/parallel_for.h>
 #include <tbb/parallel_sort.h>
 #endif
-
-#include <type_traits>
 
 
 namespace openvdb {
@@ -204,7 +204,7 @@ private:
         Measure2(LevelSetMeasure* parent) : mParent(parent), mAcc(*mParent->mTree)
         {
             if (parent->mGrainSize>0) {
-                tbb::parallel_for(parent->mLeafs->leafRange(parent->mGrainSize), *this);
+				OPENVDB_FOR_EACH(*this, parent->mLeafs->leafRange(parent->mGrainSize));
             } else {
                 (*this)(parent->mLeafs->leafRange());
             }
@@ -219,7 +219,7 @@ private:
         Measure3(LevelSetMeasure* parent) : mParent(parent), mAcc(*mParent->mTree)
         {
             if (parent->mGrainSize>0) {
-                tbb::parallel_for(parent->mLeafs->leafRange(parent->mGrainSize), *this);
+				OPENVDB_FOR_EACH(*this, parent->mLeafs->leafRange(parent->mGrainSize));
             } else {
                 (*this)(parent->mLeafs->leafRange());
             }
@@ -232,7 +232,11 @@ private:
     inline double reduce(double* first, double scale)
     {
         double* last = first + mLeafs->leafCount();
+#ifdef OPENVDB_USE_TBB
         tbb::parallel_sort(first, last);//reduces catastrophic cancellation
+#else
+		std::sort(first, last);
+#endif
         Real sum = 0.0;
         while(first != last) sum += *first++;
         return scale * sum;

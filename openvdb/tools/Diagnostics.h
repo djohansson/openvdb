@@ -45,11 +45,6 @@
 #include <openvdb/math/Operators.h>
 #include <openvdb/tree/LeafManager.h>
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/blocked_range.h>
-#include <tbb/parallel_reduce.h>
-#endif
-
 #include <cmath> // for std::isnan(), std::isfinite()
 #include <set>
 #include <sstream>
@@ -724,6 +719,7 @@ private:
             , mCount(0)
         {
         }
+#ifdef OPENVDB_USE_TBB
         CheckValues(CheckValues& other, tbb::split)
             : mOwnsMask(true)
             , mMask(other.mMask ? new MaskT() : nullptr)
@@ -732,6 +728,7 @@ private:
             , mCount(0)
         {
         }
+#endif
         ~CheckValues() { if (mOwnsMask) delete mMask; }
 
         std::string checkBackground()
@@ -766,7 +763,7 @@ private:
             std::ostringstream ss;
             LeafManagerT leafs(mGrid->tree());
             const Index64 n = mCount;
-            tbb::parallel_reduce(leafs.leafRange(), *this);
+            OPENVDB_REDUCE(*this, leafs.leafRange());
             if (const Index64 m = mCount - n) {
                 ss << m << " voxel" << (m==1 ? " is " : "s are ") + mCheck.str() << std::endl;
             }
@@ -1141,8 +1138,11 @@ public:
 
     void getInactiveValues(SetType&) const;
 
+#ifdef OPENVDB_USE_TBB
     inline InactiveVoxelValues(const InactiveVoxelValues<TreeType>&, tbb::split);
-    inline void operator()(const std::pair<size_t, size_t>&);
+#endif
+
+    inline void operator()(const BlockedRange<size_t>&);
     inline void join(const InactiveVoxelValues<TreeType>&);
 
 private:
@@ -1159,6 +1159,7 @@ InactiveVoxelValues<TreeType>::InactiveVoxelValues(LeafArray& leafs, size_t numV
 {
 }
 
+#ifdef OPENVDB_USE_TBB
 template <typename TreeType>
 inline
 InactiveVoxelValues<TreeType>::InactiveVoxelValues(
@@ -1168,12 +1169,13 @@ InactiveVoxelValues<TreeType>::InactiveVoxelValues(
     , mNumValues(rhs.mNumValues)
 {
 }
+#endif
 
 template<typename TreeType>
 void
 InactiveVoxelValues<TreeType>::runParallel()
 {
-    tbb::parallel_reduce(mLeafArray.getRange(), *this);
+    OPENVDB_REDUCE(*this, mLeafArray.getRange());
 }
 
 
@@ -1187,7 +1189,7 @@ InactiveVoxelValues<TreeType>::runSerial()
 
 template<typename TreeType>
 inline void
-InactiveVoxelValues<TreeType>::operator()(const std::pair<size_t, size_t>& range)
+InactiveVoxelValues<TreeType>::operator()(const BlockedRange<size_t>& range)
 {
     typename TreeType::LeafNodeType::ValueOffCIter iter;
 
@@ -1235,7 +1237,10 @@ public:
 
     void getInactiveValues(SetType&) const;
 
+#ifdef OPENVDB_USE_TBB
     inline InactiveTileValues(const InactiveTileValues<TreeType>&, tbb::split);
+#endif
+
     inline void operator()(IterRange&);
     inline void join(const InactiveTileValues<TreeType>&);
 
@@ -1252,6 +1257,7 @@ InactiveTileValues<TreeType>::InactiveTileValues(size_t numValues)
 {
 }
 
+#ifdef OPENVDB_USE_TBB
 template <typename TreeType>
 inline
 InactiveTileValues<TreeType>::InactiveTileValues(
@@ -1260,12 +1266,13 @@ InactiveTileValues<TreeType>::InactiveTileValues(
     , mNumValues(rhs.mNumValues)
 {
 }
+#endif
 
 template<typename TreeType>
 void
 InactiveTileValues<TreeType>::runParallel(IterRange& range)
 {
-    tbb::parallel_reduce(range, *this);
+	OPENVDB_REDUCE(*this, range);
 }
 
 

@@ -49,8 +49,6 @@
 #include <openvdb/math/Transform.h>
 
 #ifdef OPENVDB_USE_TBB
-#include <tbb/blocked_range.h>
-#include <tbb/parallel_for.h>
 #include <tbb/task_scheduler_init.h>
 #endif
 
@@ -260,7 +258,7 @@ struct ComputePointOrderOp
     {
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) const {
+    void operator()(const BlockedRange<size_t>& range) const {
         for (size_t n = range.begin(), N = range.end(); n != N; ++n) {
             mPointOrder[n] += mBucketCounters[mBucketOffsets[n]];
         }
@@ -283,7 +281,7 @@ struct CreateOrderedPointIndexArrayOp
     {
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) const {
+    void operator()(const BlockedRange<size_t>& range) const {
         for (size_t n = range.begin(), N = range.end(); n != N; ++n) {
             mOrderedIndexArray[mPointOrder[n]] = mIndices[n];
         }
@@ -309,7 +307,7 @@ struct VoxelOrderOp
     {
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) const {
+    void operator()(const BlockedRange<size_t>& range) const {
 
         PointIndexType pointCount = 0;
         for (size_t n(range.begin()), N(range.end()); n != N; ++n) {
@@ -384,7 +382,7 @@ struct LeafNodeOriginOp
     {
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) const {
+    void operator()(const BlockedRange<size_t>& range) const {
 
         using PosType = typename PointArray::PosType;
 
@@ -454,13 +452,14 @@ struct MoveSegmentDataOp
     {
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) const {
+    void operator()(const BlockedRange<size_t>& range) const {
         for (size_t n(range.begin()), N(range.end()); n != N; ++n) {
             PointIndexType* indices = mIndexLists[n];
             SegmentPtr& segment = mSegments[n];
 
-            tbb::parallel_for(std::pair<size_t, size_t>(0, segment->size()),
-                CopyData(indices, segment->data()));
+			OPENVDB_FOR_EACH(
+				CopyData(indices, segment->data()),
+				(BlockedRange<size_t>(0, segment->size())));
 
             segment.reset(); // clear data
         }
@@ -472,7 +471,7 @@ private:
     {
         CopyData(PointIndexType* lhs, const PointIndexType* rhs) : mLhs(lhs), mRhs(rhs) { }
 
-        void operator()(const std::pair<size_t, size_t>& range) const {
+        void operator()(const BlockedRange<size_t>& range) const {
             for (size_t n = range.begin(), N = range.end(); n != N; ++n) {
                 mLhs[n] = mRhs[n];
             }
@@ -512,7 +511,7 @@ struct MergeBinsOp
     {
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) const {
+    void operator()(const BlockedRange<size_t>& range) const {
 
         std::vector<IndexPairListPtr*> data;
         std::vector<PointIndexType> arrayOffsets;
@@ -553,8 +552,9 @@ struct MergeBinsOp
                 count += (*data[i])->size();
             }
 
-            tbb::parallel_for(std::pair<size_t, size_t>(0, data.size()),
-                CopyData(&data[0], &arrayOffsets[0], indexSegment->data(), offsetSegment->data()));
+			OPENVDB_FOR_EACH(
+				CopyData(&data[0], &arrayOffsets[0], indexSegment->data(), offsetSegment->data()),
+				(BlockedRange<size_t>(0, data.size())));
         }
     }
 
@@ -573,7 +573,7 @@ private:
         {
         }
 
-        void operator()(const std::pair<size_t, size_t>& range) const {
+        void operator()(const BlockedRange<size_t>& range) const {
 
             using CIter = typename IndexPairList::const_iterator;
 
@@ -638,7 +638,7 @@ struct BinPointIndicesOp
     {
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) const {
+    void operator()(const BlockedRange<size_t>& range) const {
 
         const Index log2dim = mBucketLog2Dim;
         const Index log2dim2 = 2 * log2dim;
@@ -744,7 +744,7 @@ struct OrderSegmentsOp
     {
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) const {
+    void operator()(const BlockedRange<size_t>& range) const {
 
         const size_t bucketCountersSize = size_t(mBinVolume);
         IndexArray bucketCounters(new PointIndexType[bucketCountersSize]);
@@ -792,15 +792,17 @@ struct OrderSegmentsOp
             }
 
             PointIndexType* indices = mIndexSegments[n]->data();
-            const std::pair<size_t, size_t> segmentRange(0, segmentSize);
+            const BlockedRange<size_t> segmentRange(0, segmentSize);
 
             // Compute final point order by incrementing the local bucket point index
             // with the prefix sum offset.
-            tbb::parallel_for(segmentRange, ComputePointOrderOp<PointIndexType>(
-                bucketIndices.get(), bucketCounters.get(), offsets));
+			OPENVDB_FOR_EACH(
+				ComputePointOrderOp<PointIndexType>(bucketIndices.get(), bucketCounters.get(), offsets),
+				segmentRange);
 
-            tbb::parallel_for(segmentRange, CreateOrderedPointIndexArrayOp<PointIndexType>(
-                offsets, bucketIndices.get(), indices));
+			OPENVDB_FOR_EACH(
+				CreateOrderedPointIndexArrayOp<PointIndexType>(offsets, bucketIndices.get(), indices),
+				segmentRange);
 
             mIndexSegments[n]->clear(); // clear data
         }
@@ -835,7 +837,12 @@ inline void binAndSegment(
     using IndexPairListMap = std::map<Coord, IndexPairListPtr>;
     using IndexPairListMapPtr = SharedPtr<IndexPairListMap>;
 
-    size_t numTasks = 1, numThreads = size_t(tbb::task_scheduler_init::default_num_threads());
+	size_t numTasks = 1, numThreads =
+#ifdef OPENVDB_USE_TBB
+		size_t(tbb::task_scheduler_init::default_num_threads());
+#else
+		1;
+#endif
     if (points.size() > (numThreads * 2)) numTasks = numThreads * 2;
     else if (points.size() > numThreads) numTasks = numThreads;
 
@@ -843,9 +850,9 @@ inline void binAndSegment(
 
     using BinOp = BinPointIndicesOp<PointArray, PointIndexType, VoxelOffsetType>;
 
-    tbb::parallel_for(std::pair<size_t, size_t>(0, numTasks),
-        BinOp(bins.get(), points, voxelOffsets, xform, binLog2Dim, bucketLog2Dim,
-            numTasks, cellCenteredTransform));
+	OPENVDB_FOR_EACH(
+		BinOp(bins.get(), points, voxelOffsets, xform, binLog2Dim, bucketLog2Dim, numTasks, cellCenteredTransform),
+		(BlockedRange<size_t>(0, numTasks)));
 
     std::set<Coord> uniqueCoords;
 
@@ -868,8 +875,9 @@ inline void binAndSegment(
 
     using MergeOp = MergeBinsOp<PointIndexType>;
 
-    tbb::parallel_for(std::pair<size_t, size_t>(0, segmentCount),
-        MergeOp(bins.get(), indexSegments.get(), offsetSegments.get(), &coords[0], numTasks));
+	OPENVDB_FOR_EACH(
+		MergeOp(bins.get(), indexSegments.get(), offsetSegments.get(), &coords[0], numTasks),
+		(BlockedRange<size_t>(0, segmentCount)));
 }
 
 
@@ -903,15 +911,16 @@ inline void partition(
         indexSegments, offestSegments, numSegments, binLog2Dim, bucketLog2Dim,
             voxelOffsets.get(), cellCenteredTransform);
 
-    const std::pair<size_t, size_t> segmentRange(0, numSegments);
+    const BlockedRange<size_t> segmentRange(0, numSegments);
 
     using IndexArray = std::unique_ptr<PointIndexType[]>;
     std::unique_ptr<IndexArray[]> pageOffsetArrays(new IndexArray[numSegments]);
 
     const Index binVolume = 1u << (3u * binLog2Dim);
 
-    tbb::parallel_for(segmentRange, OrderSegmentsOp<PointIndexType>
-        (indexSegments.get(), offestSegments.get(), pageOffsetArrays.get(), binVolume));
+	OPENVDB_FOR_EACH(
+		OrderSegmentsOp<PointIndexType>(indexSegments.get(), offestSegments.get(), pageOffsetArrays.get(), binVolume),
+		segmentRange);
 
     indexSegments.reset();
 
@@ -947,8 +956,9 @@ inline void partition(
         index += offestSegments[n]->size();
     }
 
-    tbb::parallel_for(segmentRange,
-        MoveSegmentDataOp<PointIndexType>(indexArray, offestSegments.get()));
+	OPENVDB_FOR_EACH(
+		MoveSegmentDataOp<PointIndexType>(indexArray, offestSegments.get()),
+		segmentRange);
 }
 
 
@@ -1029,17 +1039,19 @@ PointPartitioner<PointIndexType, BucketLog2Dim>::construct(
         mPointIndices, mPageOffsets, mPageCount, mVoxelOffsets,
             (voxelOrder || recordVoxelOffsets), cellCenteredTransform);
 
-    const std::pair<size_t, size_t> pageRange(0, mPageCount);
+    const BlockedRange<size_t> pageRange(0, mPageCount);
     mPageCoordinates.reset(new Coord[mPageCount]);
 
-    tbb::parallel_for(pageRange,
-        point_partitioner_internal::LeafNodeOriginOp<PointArray, IndexType>
-            (mPageCoordinates, mPointIndices, mPageOffsets, points, xform,
-                BucketLog2Dim, cellCenteredTransform));
+	OPENVDB_FOR_EACH(
+		point_partitioner_internal::LeafNodeOriginOp<PointArray, IndexType>(
+			mPageCoordinates, mPointIndices, mPageOffsets, points, xform, BucketLog2Dim, cellCenteredTransform),
+		pageRange);
 
     if (mVoxelOffsets && voxelOrder) {
-        tbb::parallel_for(pageRange, point_partitioner_internal::VoxelOrderOp<
-            IndexType, BucketLog2Dim>(mPointIndices, mPageOffsets, mVoxelOffsets));
+		OPENVDB_FOR_EACH(
+			point_partitioner_internal::VoxelOrderOp<IndexType, BucketLog2Dim>(
+				mPointIndices, mPageOffsets, mVoxelOffsets),
+			pageRange);
     }
 
     if (mVoxelOffsets && !recordVoxelOffsets) {

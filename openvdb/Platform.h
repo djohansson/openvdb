@@ -153,6 +153,34 @@
     #endif
 #endif
 
+#define UNPACK(...) __VA_ARGS__
+
+#ifdef OPENVDB_USE_TBB
+#include <tbb/parallel_for.h>
+#include <tbb/parallel_reduce.h>
+#define OPENVDB_FOR_EACH(func, range) \
+	(tbb::parallel_for((range), (func)))
+#define OPENVDB_FOR_EACH_PARTITION(func, range, partition) \
+	(tbb::parallel_for((range), (func), (partition)))
+#define OPENVDB_REDUCE(func, range) \
+	(tbb::parallel_reduce((range), (func)))
+#define OPENVDB_REDUCE_SEED(func, range, seed) \
+	(tbb::parallel_reduce((range), (func), (seed)))
+#define OPENVDB_REDUCE_SEED_JOIN(func, range, seed, join) \
+	(tbb::parallel_reduce((range), (func), (seed), (join)))
+#else
+#define OPENVDB_FOR_EACH(func, range) \
+	((func)(range))
+#define OPENVDB_FOR_EACH_PARTITION(func, range, partition) \
+	((func)(range))
+#define OPENVDB_REDUCE(func, range) \
+	((func)(range))
+#define OPENVDB_REDUCE_SEED(func, range, seed) \
+	((func)((range), (seed)))
+#define OPENVDB_REDUCE_SEED_JOIN(func, range, seed, join) \
+	((func)((range), (seed)))
+#endif
+
 /// All classes and public free standing functions must be explicitly marked
 /// as \<lib\>_API to be exported. The \<lib\>_PRIVATE macros are defined when
 /// building that particular library.

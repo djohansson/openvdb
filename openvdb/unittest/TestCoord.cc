@@ -164,6 +164,7 @@ TestCoord::testCoordBBox()
         CPPUNIT_ASSERT_EQUAL(min, b.min());
         CPPUNIT_ASSERT_EQUAL(max, b.max());
     }
+#ifdef OPENVDB_USE_TBB
     {// tbb::split constructor
          const openvdb::Coord min(-1,-2,30), max(20,30,55);
          openvdb::CoordBBox a(min, max), b(a, tbb::split());
@@ -172,6 +173,7 @@ TestCoord::testCoordBBox()
          CPPUNIT_ASSERT_EQUAL(openvdb::Coord(-1, 15, 30), a.min());
          CPPUNIT_ASSERT_EQUAL(max, a.max());
     }
+#endif
     {// createCube
         const openvdb::Coord min(0,8,16);
         const openvdb::CoordBBox b = openvdb::CoordBBox::createCube(min, 8);
@@ -191,6 +193,7 @@ TestCoord::testCoordBBox()
         CPPUNIT_ASSERT_EQUAL(uint64_t(1), a.volume());
         CPPUNIT_ASSERT_EQUAL(uint64_t(0), b.volume());
     }
+#ifdef OPENVDB_USE_TBB
     {// volume and split constructor
         const openvdb::Coord min(-1,-2,30), max(20,30,55);
         const openvdb::CoordBBox bbox(min,max);
@@ -199,6 +202,7 @@ TestCoord::testCoordBBox()
         openvdb::CoordBBox c(b, tbb::split());
         CPPUNIT_ASSERT_EQUAL(bbox.volume(), a.volume() + b.volume() + c.volume());
     }
+#endif
     {// getCenter
         const openvdb::Coord min(1,2,3), max(6,10,15);
         const openvdb::CoordBBox b(min, max);

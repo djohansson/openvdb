@@ -43,11 +43,23 @@
 #include <openvdb/math/Mat3.h>
 #include <openvdb/math/Mat4.h>
 #include <openvdb/math/Coord.h>
+#include <assert.h>
+#include <map>
 #include <memory>
+#include <mutex>
+#include <thread>
 #include <type_traits>
 #if OPENVDB_ABI_VERSION_NUMBER <= 3
 #include <boost/shared_ptr.hpp>
 #include <boost/weak_ptr.hpp>
+#endif
+
+#ifdef OPENVDB_USE_TBB
+#include <tbb/blocked_range.h>
+#include <tbb/blocked_range2d.h>
+#include <tbb/blocked_range3d.h>
+#include <tbb/combinable.h>
+#include <tbb/enumerable_thread_specific.h>
 #endif
 
 
@@ -237,6 +249,245 @@ using ShortestFittingIntT = typename ShortestFittingInt<NBits>::Type;
 
 ////////////////////////////////////////
 
+
+#ifdef OPENVDB_USE_TBB
+template <typename T>
+using EnumerableThreadSpecific = typename tbb::enumerable_thread_specific<T>;
+template <typename T>
+using Combinable = typename tbb::combinable<T>;
+#else
+template <typename T>
+class Combinable
+{
+public:
+	Combinable() { createLocal(); }
+	explicit Combinable(const T& val) { createLocal(val); }
+	~Combinable() { clear(); }
+	
+	void clear()
+	{
+		std::lock_guard<std::mutex> lock(sAllLocalsMutex);
+		
+		for (auto local : sAllLocals)
+			(*local).reset(nullptr);
+		
+		sAllLocals.clear();
+	}
+
+	T& local()
+	{
+		bool exists;
+		return local(exists);
+	}
+
+	T& local(bool& exists)
+	{
+		if (mLocal)
+		{
+			exists = true;
+		}
+		else
+		{
+			createLocal();
+			exists = false;
+		}
+		
+		return *mLocal;
+	}
+
+	auto size() const
+	{
+		std::lock_guard<std::mutex> lock(sAllLocalsMutex);
+
+		return sAllLocals.size();
+	}
+
+	bool empty() const
+	{
+		std::lock_guard<std::mutex> lock(sAllLocalsMutex);
+
+		return sAllLocals.empty();
+	}
+
+	template<typename Function>
+	T combine(Function binaryCombineFcn) const
+	{
+		std::lock_guard<std::mutex> lock(sAllLocalsMutex);
+
+		if (sAllLocals.empty())
+			return T();
+		
+		T result;
+		for (auto local : sAllLocals)
+			result = binaryCombineFcn(result, *local);
+
+		return result;
+	}
+
+	template<typename Function>
+	void combine_each(Function unaryCombineFunction) const
+	{
+		std::lock_guard<std::mutex> lock(sAllLocalsMutex);
+
+		for (auto local : sAllLocals)
+			unaryCombineFunction(*local);
+	}
+
+private:
+
+	auto getThreadId() const 
+	{
+		return std::this_thread::get_id();
+	}
+
+	void createLocal(const T& val = T())
+	{
+		std::lock_guard<std::mutex> lock(sAllLocalsMutex);
+
+		mLocal = make_unique<T>(val);
+		sAllLocals[getThreadId()] = &mLocal;
+	}
+
+	thread_local static std::unique_ptr<T> mLocal;
+	static std::mutex sAllLocalsMutex;
+	static std::map<std::thread::id, std::unique_ptr<T>*> sAllLocals;
+};
+
+template <typename T>
+using EnumerableThreadSpecific = typename Combinable<T>;
+#endif
+
+
+////////////////////////////////////////
+
+#ifdef OPENVDB_USE_TBB
+template <typename T>
+using BlockedRange = typename tbb::blocked_range<T>;
+template<typename T, typename U = T>
+using BlockedRange2D = typename tbb::blocked_range2d<T, U>;
+template<typename T, typename U = T, typename V = U>
+using BlockedRange3D = typename tbb::blocked_range3d<T, U, V>;
+#else
+template<typename T>
+class BlockedRange
+{
+public:
+	
+	typedef T const_iterator;
+	typedef std::size_t size_type;
+
+	BlockedRange() : mEnd(), mBegin(), mGrainSize() {}
+	BlockedRange(T begin_, T end_, size_type grainsize_ = 1) :
+		mEnd(end_), mBegin(begin_), mGrainSize(grainsize_)
+	{
+		assert(mGrainSize>0, "grainsize must be positive");
+	}
+
+	const_iterator begin() const { return mBegin; }
+	const_iterator end() const { return mEnd; }
+
+	size_type size() const
+	{
+		assert(!(end() < begin()), "size() unspecified if end() < begin()");
+		return size_type(mEnd - mBegin);
+	}
+
+	size_type grainsize() const { return mGrainSize; }
+	bool empty() const { return !(mBegin < mEnd); }
+	bool is_divisible() const { return mGrainSize < size(); }
+
+private:
+	T mEnd;
+	T mBegin;
+	size_type mGrainSize;
+};
+
+template<typename RowValue, typename ColValue = RowValue>
+class BlockedRange2D
+{
+public:
+
+	typedef BlockedRange<RowValue>  RowRangeT;
+	typedef BlockedRange<ColValue>  ColRangeT;
+
+	BlockedRange2D(
+		RowValue rowBegin, RowValue rowEnd,
+		ColValue col_begin, ColValue col_end)
+		: mRows(rowBegin, rowEnd)
+		, mCols(col_begin, col_end)
+	{}
+
+	BlockedRange2D(
+		RowValue row_begin, RowValue row_end, typename RowRangeT::size_type rowGrainSize,
+		ColValue colBegin, ColValue colEnd, typename ColRangeT::size_type colGrainSize)
+		: mRows(row_begin, row_end, rowGrainSize)
+		, mCols(colBegin, colEnd, colGrainSize)
+	{}
+
+	bool empty() const { return mRows.empty() || mCols.empty(); }
+	bool is_divisible() const { return  mRows.is_divisible() || mCols.is_divisible(); }
+
+	const RowRangeT& rows() const { return mRows; }
+	const ColRangeT& cols() const { return mCols; }
+
+private:
+	RowRangeT  mRows;
+	ColRangeT  mCols;
+};
+
+template<typename PageValue, typename RowValue = PageValue, typename ColValue = RowValue>
+class BlockedRange3D
+{
+public:
+
+	typedef BlockedRange<PageValue> PageRangeT;
+	typedef BlockedRange<RowValue>  RowRangeT;
+	typedef BlockedRange<ColValue>  ColRangeT;
+
+	BlockedRange3D(
+		PageValue pageBegin, PageValue pageEnd,
+		RowValue rowBegin, RowValue rowEnd,
+		ColValue col_begin, ColValue col_end)
+		: mPages(pageBegin, pageEnd)
+		, mRows(rowBegin, rowEnd)
+		, mCols(col_begin, col_end)
+	{}
+
+	BlockedRange3D(
+		PageValue page_begin, PageValue page_end, typename PageRangeT::size_type pageGrainSize,
+		RowValue row_begin, RowValue row_end, typename RowRangeT::size_type rowGrainSize,
+		ColValue colBegin, ColValue colEnd, typename ColRangeT::size_type colGrainSize)
+		: mPages(page_begin, page_end, pageGrainSize)
+		, mRows(row_begin, row_end, rowGrainSize)
+		, mCols(colBegin, colEnd, colGrainSize)
+	{}
+
+	bool empty() const { return mPages.empty() || mRows.empty() || mCols.empty(); }
+	bool is_divisible() const { return  mPages.is_divisible() || mRows.is_divisible() || mCols.is_divisible(); }
+
+	const PageRangeT& pages() const { return mPages; }
+	const RowRangeT& rows() const { return mRows; }
+	const ColRangeT& cols() const { return mCols; }
+
+private:
+	PageRangeT mPages;
+	RowRangeT  mRows;
+	ColRangeT  mCols;
+};
+#endif
+
+
+////////////////////////////////////////
+
+
+#ifdef OPENVDB_USE_TBB
+using SimplePartitioner = typename tbb::simple_partitioner;
+#else
+using SimplePartitioner = void;
+#endif
+
+
+////////////////////////////////////////
 
 template<typename T> struct VecTraits {
     static const bool IsVec = false;

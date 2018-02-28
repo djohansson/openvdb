@@ -39,7 +39,6 @@
 #ifndef OPENVDB_TOOLS_LEVEL_SET_TRACKER_HAS_BEEN_INCLUDED
 #define OPENVDB_TOOLS_LEVEL_SET_TRACKER_HAS_BEEN_INCLUDED
 
-#include <tbb/parallel_for.h>
 #include <openvdb/Types.h>
 #include <openvdb/math/Math.h>
 #include <openvdb/math/FiniteDifference.h>
@@ -447,7 +446,7 @@ Trim::trim()
     const LeafRange range = mTracker.leafs().leafRange(grainSize);
 
     if (grainSize>0) {
-        tbb::parallel_for(range, *this);
+        OPENVDB_FOR_EACH(*this, range);
     } else {
         (*this)(range);
     }
@@ -582,7 +581,7 @@ cook(const char* msg, int swapBuffer)
     const int grainSize   = mTracker.getGrainSize();
     const LeafRange range = mTracker.leafs().leafRange(grainSize);
 
-    grainSize>0 ? tbb::parallel_for(range, *this) : (*this)(range);
+    grainSize>0 ? OPENVDB_FOR_EACH(*this, range) : (*this)(range);
 
     mTracker.leafs().swapLeafBuffer(swapBuffer, grainSize==0);
 

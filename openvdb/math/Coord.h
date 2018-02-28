@@ -39,7 +39,9 @@
 #include "Math.h"
 #include "Vec3.h"
 
+#ifdef OPENVDB_USE_TBB
 namespace tbb { class split; } // forward declaration
+#endif
 
 
 namespace openvdb {
@@ -318,13 +320,17 @@ public:
     }
     /// @brief Splitting constructor for use in TBB ranges
     /// @note The other bounding box is assumed to be divisible.
-    CoordBBox(CoordBBox& other, const tbb::split&): mMin(other.mMin), mMax(other.mMax)
+#ifdef OPENVDB_USE_TBB
+    CoordBBox(CoordBBox& other, const tbb::split&)
+		: mMin(other.mMin)
+		, mMax(other.mMax)
     {
         assert(this->is_divisible());
         const size_t n = this->maxExtent();
         mMax[n] = (mMin[n] + mMax[n]) >> 1;
         other.mMin[n] = mMax[n] + 1;
     }
+#endif
 
     static CoordBBox createCube(const Coord& min, ValueType dim)
     {

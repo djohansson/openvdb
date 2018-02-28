@@ -60,12 +60,6 @@
 #include <openvdb/tree/Tree.h>
 #include <openvdb/tree/LeafNode.h>
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/blocked_range.h>
-#include <tbb/parallel_for.h>
-#include <tbb/parallel_reduce.h>
-#endif
-
 #include <algorithm> // for std::min(), std::max()
 #include <cmath> // for std::sqrt()
 #include <deque>
@@ -293,7 +287,7 @@ struct ComputeExtremas
     {
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) {
+    void operator()(const BlockedRange<size_t>& range) {
 
         ScalarType radius, tmpMin = minRadius, tmpMax = maxRadius;
 
@@ -362,7 +356,7 @@ struct SplittableParticleArray
 
         std::unique_ptr<bool[]> mask{new bool[mSize]};
 
-        tbb::parallel_for(std::pair<size_t, size_t>(0, mSize),
+        tbb::parallel_for(BlockedRange<size_t>(0, mSize),
             MaskParticles(*this, mask, maxRadiusLimit));
 
         Ptr output(new SplittableParticleArray(*this, mask));
@@ -416,7 +410,7 @@ private:
         {
         }
 
-        void operator()(const std::pair<size_t, size_t>& range) const {
+        void operator()(const BlockedRange<size_t>& range) const {
             const ScalarType maxRadius = radiusLimit;
             ScalarType radius;
             for (size_t n = range.begin(), N = range.end(); n != N; ++n) {
@@ -432,7 +426,7 @@ private:
 
     inline void updateExtremas() {
         ComputeExtremas<SplittableParticleArray> op(*this);
-        tbb::parallel_reduce(std::pair<size_t, size_t>(0, mSize), op);
+		OPENVDB_REDUCE(op, BlockedRange<size_t>(0, mSize));
         mMinRadius = op.minRadius;
         mMaxRadius = op.maxRadius;
     }
@@ -473,7 +467,7 @@ struct RemapIndices {
     {
     }
 
-    void operator()(const std::pair<size_t, size_t>& range) const
+    void operator()(const BlockedRange<size_t>& range) const
     {
         using PointIndexType = typename PointIndexLeafNodeType::ValueType;
         for (size_t n = range.begin(), N = range.end(); n != N; ++n) {
@@ -726,7 +720,7 @@ ParticleAtlas<PointIndexGridType>::construct(
     /////
 
     particle_atlas_internal::ComputeExtremas<ParticleArrayType> extremas(particles);
-    tbb::parallel_reduce(std::pair<size_t, size_t>(0, particles.size()), extremas);
+	OPENVDB_REDUCE(extremas, BlockedRange<size_t>(0, particles.size()));
     const double firstMin = extremas.minRadius;
     const double firstMax = extremas.maxRadius;
     const double firstVoxelSize = std::max(minVoxelSize, firstMin);
@@ -776,7 +770,7 @@ ParticleAtlas<PointIndexGridType>::construct(
             nodes.clear();
             grid->tree().getNodes(nodes);
 
-            tbb::parallel_for(std::pair<size_t, size_t>(0, nodes.size()),
+            tbb::parallel_for(BlockedRange<size_t>(0, nodes.size()),
                 particle_atlas_internal::RemapIndices<SplittableParticleArray,
                     PointIndexLeafNodeType>(particleArray, nodes));
 

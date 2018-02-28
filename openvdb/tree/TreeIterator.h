@@ -33,11 +33,6 @@
 #ifndef OPENVDB_TREE_TREEITERATOR_HAS_BEEN_INCLUDED
 #define OPENVDB_TREE_TREEITERATOR_HAS_BEEN_INCLUDED
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/blocked_range.h>
-#include <tbb/parallel_for.h>
-#endif
-
 #include <openvdb/external/brigand.hpp>
 #include <openvdb/version.h>
 #include <openvdb/Types.h>
@@ -1357,13 +1352,15 @@ public:
     {
         mSize = this->size();
     }
-    IteratorRange(IteratorRange& other, tbb::split):
-        mIter(other.mIter),
-        mGrainSize(other.mGrainSize),
-        mSize(other.mSize >> 1)
+#ifdef OPENVDB_USE_TBB
+    IteratorRange(IteratorRange& other, tbb::split)
+		: mIter(other.mIter)
+		, mGrainSize(other.mGrainSize)
+		, mSize(other.mSize >> 1)
     {
         other.increment(mSize);
     }
+#endif
 
     /// @brief Return a reference to this range's iterator.
     /// @note The reference is const, because the iterator should not be

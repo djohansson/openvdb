@@ -43,10 +43,6 @@
 #include <openvdb/util/Formats.h>
 #include "Prune.h"
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/parallel_for.h>
-#endif
-
 #include <iostream>
 #include <memory>
 #include <string>
@@ -430,7 +426,7 @@ public:
         if (serial) {
             mRoot->copyToDense(mDense->bbox(), *mDense);
         } else {
-            tbb::parallel_for(mDense->bbox(), *this);
+            OPENVDB_FOR_EACH(*this, mDense->bbox());
         }
     }
 
@@ -520,9 +516,9 @@ public:
 
         // Multi-threaded process: Convert dense grid into leaf nodes and tiles
         if (serial) {
-            (*this)(std::pair<size_t, size_t>(0, mBlocks->size()));
+            (*this)(BlockedRange<size_t>(0, mBlocks->size()));
         } else {
-            tbb::parallel_for(std::pair<size_t, size_t>(0, mBlocks->size()), *this);
+            OPENVDB_FOR_EACH(*this, BlockedRange<size_t>(0, mBlocks->size()));
         }
 
         // Post-process: Insert leaf nodes and tiles into the tree, and prune the tiles only!
@@ -543,7 +539,7 @@ public:
 
     /// @brief Public method called by tbb::parallel_for
     /// @warning Never call this method directly!
-    void operator()(const std::pair<size_t, size_t> &r) const
+    void operator()(const BlockedRange<size_t> &r) const
     {
         assert(mBlocks);
         LeafT* leaf = new LeafT();

@@ -31,16 +31,10 @@
 #ifndef OPENVDB_TOOLS_DENSESPARSETOOLS_HAS_BEEN_INCLUDED
 #define OPENVDB_TOOLS_DENSESPARSETOOLS_HAS_BEEN_INCLUDED
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/parallel_reduce.h>
-#include <tbb/blocked_range3d.h>
-#include <tbb/blocked_range2d.h>
-#include <tbb/blocked_range.h>
-#endif
-
 #include <openvdb/Types.h>
 #include <openvdb/tree/LeafManager.h>
 #include "Dense.h"
+#include <tuple>
 
 
 namespace openvdb {
@@ -210,7 +204,7 @@ public:
     typedef typename ResultTreeType::LeafNodeType         ResultLeafNodeType;
     typedef typename ResultTreeType::template ValueConverter<ValueMask>::Type MaskTree;
 
-    typedef tbb::blocked_range3d<Index, Index, Index>     Range3d;
+    typedef BlockedRange3D<Index>						  Range3d;
 
 
 private:
@@ -253,6 +247,7 @@ public:
     }
 
 
+#ifdef OPENVDB_USE_TBB
     SparseExtractor(SparseExtractor& other, tbb::split):
         mDense(other.mDense), mFunctor(other.mFunctor),
         mBackground(other.mBackground), mBBox(other.mBBox),
@@ -260,6 +255,7 @@ public:
         mMask(new ResultTreeType(mBackground)),
         mMin(other.mMin)
     {}
+#endif
 
     typename ResultTreeType::Ptr extract(bool threaded = true) {
 
@@ -298,7 +294,7 @@ public:
 
         // Iterate over the leafnodes applying *this as a functor.
         if (threaded) {
-            tbb::parallel_reduce(leafRange, *this);
+            OPENVDB_REDUCE(*this, leafRange);
         } else {
             (*this)(leafRange);
         }
@@ -465,18 +461,19 @@ public:
     {}
 
 
-
+#ifdef OPENVDB_USE_TBB
     SparseMaskedExtractor(const SparseMaskedExtractor& other, tbb::split):
         mDense(other.mDense), mBackground(other.mBackground), mBBox(other.mBBox),
         mLeafVec(other.mLeafVec), mResult( new ResultTreeType(mBackground))
     {}
+#endif
 
     typename ResultTreeType::Ptr extract(bool threaded = true) {
 
-        std::pair<size_t, size_t> range(0, mLeafVec.size());
+        BlockedRange<size_t> range(0, mLeafVec.size());
 
         if (threaded) {
-            tbb::parallel_reduce(range, *this);
+            OPENVDB_REDUCE(*this, range);
         } else {
             (*this)(range);
         }
@@ -487,7 +484,7 @@ public:
 
     // Used in looping over leaf nodes in the masked grid
     // and using the active mask to select data to
-    void operator()(const std::pair<size_t, size_t>& range) {
+    void operator()(const BlockedRange<size_t>& range) {
 
         ResultLeafNodeType* leaf = NULL;
 
@@ -695,7 +692,7 @@ public:
     typedef _ValueT                                 ValueT;
     typedef Dense<ValueT, openvdb::tools::LayoutZYX>       DenseT;
     typedef openvdb::math::Coord::ValueType         IntType;
-    typedef tbb::blocked_range2d<IntType, IntType>  RangeType;
+    typedef BlockedRange2D<IntType> RangeType;
 
 
 private:
@@ -733,7 +730,7 @@ public:
                               start.y(), end.y(), 1);
 
         if (threaded) {
-            tbb::parallel_for(range, *this);
+            OPENVDB_FOR_EACH(*this, range);
         } else {
             (*this)(range);
         }
@@ -816,7 +813,7 @@ public:
     typedef typename MaskTreeT::LeafNodeType                     MaskLeafT;
     typedef Dense<ValueT, openvdb::tools::LayoutZYX>             DenseT;
     typedef openvdb::math::Coord::ValueType                      Index;
-    typedef tbb::blocked_range3d<Index, Index, Index>            Range3d;
+	typedef BlockedRange3D<Index>								 Range3d;
 
     SparseToDenseCompositor(DenseT& dense, const TreeT& source, const TreeT& alpha,
                             const ValueT beta, const ValueT strength) :
@@ -1015,7 +1012,7 @@ public:
         // the dense grid using value accessors for
         // sparse the grids.
         if (threaded) {
-            tbb::parallel_for(range, *this);
+            OPENVDB_FOR_EACH(*this, range);
         } else {
             (*this)(range);
         }

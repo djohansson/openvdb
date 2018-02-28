@@ -73,13 +73,6 @@
 #ifndef OPENVDB_TOOLS_POINTSTOMASK_HAS_BEEN_INCLUDED
 #define OPENVDB_TOOLS_POINTSTOMASK_HAS_BEEN_INCLUDED
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/enumerable_thread_specific.h>
-#include <tbb/parallel_for.h>
-#include <tbb/parallel_reduce.h>
-#include <tbb/blocked_range.h>
-#endif
-
 #include <openvdb/openvdb.h> // for MaskGrid
 #include <openvdb/Grid.h>
 #include <openvdb/Types.h>
@@ -153,17 +146,24 @@ public:
     void addPoints(const PointListT& points, size_t grainSize = 1024)
     {
         if (mInterrupter) mInterrupter->start("PointsToMask: adding points");
-        if (grainSize > 0) {
+#ifdef OPENVDB_USE_TBB
+        if (grainSize > 0)
+		{
 #if OPENVDB_ABI_VERSION_NUMBER <= 3
             typename GridT::Ptr examplar = mGrid->copy(CP_NEW);
 #else
             typename GridT::Ptr examplar = mGrid->copyWithNewTree();
 #endif
-            PoolType pool( *examplar );//thread local storage pool of grids
+			PoolType pool({ *examplar });//thread local storage pool of grids
             AddPoints<PointListT> tmp(points, pool, grainSize, *this );
             if ( this->interrupt() ) return;
             ReducePool reducePool(pool, mGrid, size_t(0));
-        } else {
+        }
+		else
+#else
+		(void)grainSize;
+#endif
+		{
             const math::Transform& xform = mGrid->transform();
             typename GridT::Accessor acc = mGrid->getAccessor();
             Vec3R wPos;
@@ -173,7 +173,7 @@ public:
                 acc.setValueOn( xform.worldToIndexCellCentered( wPos ) );
             }
         }
-        if (mInterrupter) mInterrupter->end();
+		if (mInterrupter) mInterrupter->end();
     }
 
 private:
@@ -184,7 +184,9 @@ private:
     bool interrupt() const
     {
         if (mInterrupter && util::wasInterrupted(mInterrupter)) {
+#ifdef OPENVDB_USE_TBB
             tbb::task::self().cancel_group_execution();
+#endif
             return true;
         }
         return false;
@@ -192,9 +194,8 @@ private:
 
     // Private struct that implements concurrent thread-local
     // insersion of points into a grid
-    using PoolType = tbb::enumerable_thread_specific<GridT>;
+    using PoolType = EnumerableThreadSpecific<GridT>;
     template<typename PointListT> struct AddPoints;
-
     // Private class that implements concurrent reduction of a thread-local pool
     struct ReducePool;
 
@@ -216,9 +217,9 @@ struct PointsToMask<GridT, InterrupterT>::AddPoints
         , mParent(&parent)
         , mPool(&pool)
     {
-        tbb::parallel_for(std::pair<size_t, size_t>(0, mPoints->size(), grainSize), *this);
+        tbb::parallel_for(std::make_tuple(0, mPoints->size(), grainSize), *this);
     }
-    void operator()(const std::pair<size_t, size_t>& range) const
+    void operator()(const BlockedRange<size_t>& range) const
     {
         if (mParent->interrupt()) return;
         GridT& grid = mPool->local();
@@ -242,34 +243,34 @@ struct PointsToMask<GridT, InterrupterT>::ReducePool
 {
     using VecT = std::vector<GridT*>;
     using IterT = typename VecT::iterator;
-    using RangeT = tbb::blocked_range<IterT>;
 
     ReducePool(PoolType& pool, GridT* grid, size_t grainSize = 1)
         : mOwnsGrid(false)
         , mGrid(grid)
     {
         if ( grainSize == 0 ) {
-            using IterT = typename PoolType::const_iterator;
-            for (IterT i=pool.begin(); i!=pool.end(); ++i) mGrid->topologyUnion( *i );
+            for (auto i=pool.begin(); i!=pool.end(); ++i) mGrid->topologyUnion( *i );
         } else {
             VecT grids( pool.size() );
             typename PoolType::iterator i = pool.begin();
             for (size_t j=0; j != pool.size(); ++i, ++j) grids[j] = &(*i);
-            tbb::parallel_reduce( RangeT( grids.begin(), grids.end(), grainSize ), *this );
+            OPENVDB_REDUCE(*this, BlockedRange<IterT>(grids.begin(), grids.end(), grainSize));
         }
     }
 
+#ifdef OPENVDB_USE_TBB
     ReducePool(const ReducePool&, tbb::split)
         : mOwnsGrid(true)
         , mGrid(new GridT())
     {
     }
+#endif
 
     ~ReducePool() { if (mOwnsGrid) delete mGrid; }
 
-    void operator()(const RangeT& r)
+    void operator()(const BlockedRange<IterT>& r)
     {
-        for (IterT i=r.begin(); i!=r.end(); ++i) mGrid->topologyUnion( *(*i) );
+        for (IterT i=r.begin(); i!= r.end(); ++i) mGrid->topologyUnion( *(*i) );
     }
 
     void join(ReducePool& other) { mGrid->topologyUnion(*other.mGrid); }

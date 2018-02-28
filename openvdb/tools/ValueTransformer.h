@@ -58,11 +58,6 @@
 
 #include <algorithm> // for std::min(), std::max()
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/parallel_for.h>
-#include <tbb/parallel_reduce.h>
-#endif
-
 #include <openvdb/Types.h>
 #include <openvdb/Grid.h>
 
@@ -343,7 +338,7 @@ public:
     {
         IterRange range(mIter);
         if (threaded) {
-            tbb::parallel_for(range, *this);
+            OPENVDB_FOR_EACH(*this, range);
         } else {
             (*this)(range);
         }
@@ -373,11 +368,11 @@ public:
     void process(bool threaded = true)
     {
         IterRange range(mIter);
-        if (threaded) {
-            tbb::parallel_for(range, *this);
-        } else {
+		if (threaded) {
+			OPENVDB_FOR_EACH(*this, range);
+		} else {
             (*this)(range);
-        }
+		}
     }
 
     void operator()(IterRange& r) const { for ( ; r; ++r) mOp(r.iterator()); }
@@ -443,6 +438,7 @@ public:
     }
 
     /// Splitting constructor
+#ifdef OPENVDB_USE_TBB
     SharedOpTransformer(SharedOpTransformer& other, tbb::split):
         mIsRoot(false),
         mInputIter(other.mInputIter),
@@ -451,6 +447,7 @@ public:
         mOp(other.mOp),
         mMergePolicy(other.mMergePolicy)
         {}
+#endif
 
     ~SharedOpTransformer()
     {
@@ -471,7 +468,7 @@ public:
         // Independently transform elements in the iterator range,
         // either in parallel or serially.
         if (threaded) {
-            tbb::parallel_reduce(range, *this);
+            OPENVDB_REDUCE(*this, range);
         } else {
             (*this)(range);
         }
@@ -530,6 +527,7 @@ public:
 
     // When splitting this task, give the subtask a copy of the original functor,
     // not of this task's functor, which might have been modified arbitrarily.
+#ifdef OPENVDB_USE_TBB
     CopyableOpTransformer(CopyableOpTransformer& other, tbb::split):
         mIsRoot(false),
         mInputIter(other.mInputIter),
@@ -539,6 +537,7 @@ public:
         mOrigOp(other.mOrigOp),
         mMergePolicy(other.mMergePolicy)
         {}
+#endif
 
     ~CopyableOpTransformer()
     {
@@ -559,7 +558,7 @@ public:
         // Independently transform elements in the iterator range,
         // either in parallel or serially.
         if (threaded) {
-            tbb::parallel_reduce(range, *this);
+			OPENVDB_REDUCE(*this, range);
         } else {
             (*this)(range);
         }
@@ -664,12 +663,14 @@ mOrigOp(NULL)
 
     // When splitting this task, give the subtask a copy of the original functor,
     // not of this task's functor, which might have been modified arbitrarily.
+#ifdef OPENVDB_USE_TBB
     OpAccumulator(OpAccumulator& other, tbb::split):
         mIsRoot(false),
         mIter(other.mIter),
         mOp(new OpT(*other.mOrigOp)),
         mOrigOp(other.mOrigOp)
     {}
+#endif
 
     ~OpAccumulator() { if (mIsRoot) delete mOrigOp; else delete mOp; }
 
@@ -677,7 +678,7 @@ mOrigOp(NULL)
     {
         IterRange range(mIter);
         if (threaded) {
-            tbb::parallel_reduce(range, *this);
+			OPENVDB_REDUCE(*this, range);
         } else {
             (*this)(range);
         }

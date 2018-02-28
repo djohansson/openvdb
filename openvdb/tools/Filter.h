@@ -39,10 +39,6 @@
 #ifndef OPENVDB_TOOLS_FILTER_HAS_BEEN_INCLUDED
 #define OPENVDB_TOOLS_FILTER_HAS_BEEN_INCLUDED
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/parallel_for.h>
-#endif
-
 #include <openvdb/Types.h>
 #include <openvdb/math/Math.h>
 #include <openvdb/math/Stencils.h>
@@ -349,7 +345,7 @@ inline void
 Filter<GridT, MaskT, InterruptT>::cook(LeafManagerType& leafs)
 {
     if (mGrainSize>0) {
-        tbb::parallel_for(leafs.leafRange(mGrainSize), *this);
+        OPENVDB_FOR_EACH(*this, leafs.leafRange(mGrainSize));
     } else {
         (*this)(leafs.leafRange());
     }

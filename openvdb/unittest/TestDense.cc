@@ -289,7 +289,7 @@ public:
     {
         mTree  = &tree;
         mDense = &dense;
-        tbb::parallel_for(dense.bbox(), *this);
+		OPENVDB_FOR_EACH(*this, dense.bbox());
     }
     void operator()(const openvdb::CoordBBox& bbox) const
     {

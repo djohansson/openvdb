@@ -47,14 +47,12 @@
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/tick_count.h>
-#include <tbb/atomic.h>
-#endif
-
+#include <atomic>
+#include <chrono>
 #include <fstream>
 #include <sstream>
 #include <iostream>
+
 
 #ifdef _MSC_VER
 #include <boost/interprocess/detail/os_file_functions.hpp> // open_existing_file(), close_file()
@@ -124,6 +122,9 @@ private:
 /// @endcode
 class ProfileTimer
 {
+	using hires_clock = std::chrono::high_resolution_clock;
+	using time_point = hires_clock::time_point;
+
 public:
     /// @brief Prints message and starts timer.
     ///
@@ -137,7 +138,7 @@ public:
         if (newMsg.size() < 50)     newMsg.insert(newMsg.end(), 50 - newMsg.size(), ' ');
         std::cerr << newMsg << " ... ";
 #endif
-        mT0 = tbb::tick_count::now();
+        mT0 = hires_clock::now();
     }
 
     ~ProfileTimer() { this->stop(); }
@@ -145,8 +146,7 @@ public:
     /// Return Time diference in milliseconds since construction or start was called.
     inline double delta() const
     {
-        tbb::tick_count::interval_t dt = tbb::tick_count::now() - mT0;
-        return 1000.0*dt.seconds();
+        return std::chrono::duration_cast<std::chrono::milliseconds>(hires_clock::now() - mT0).count();
     }
 
     /// @brief Print time in milliseconds since construction or start was called.
@@ -160,7 +160,7 @@ public:
     }
 
 private:
-    tbb::tick_count mT0;
+	time_point mT0;
 };// ProfileTimer
 
 
