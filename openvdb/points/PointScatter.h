@@ -56,10 +56,6 @@
 #include "PointCount.h"
 #include "PointDataGrid.h"
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/parallel_sort.h>
-#endif
-
 namespace openvdb {
 OPENVDB_USE_VERSION_NAMESPACE
 namespace OPENVDB_VERSION_NAME {
@@ -327,12 +323,9 @@ uniformPointScatter(const GridT& grid,
         return points;
     }
 
-#ifdef OPENVDB_USE_TBB
-    tbb::parallel_sort(values.begin(), values.end());
-#else
-	std::sort(values.begin(), values.end());
-#endif
-    const bool fractionalOnly(pointsPerVoxel == 0);
+	OPENVDB_SORT(values.begin(), values.end());
+
+	const bool fractionalOnly(pointsPerVoxel == 0);
 
     leafManager.foreach([&voxelOffsets, &values, fractionalOnly]
                         (LeafNodeType& leaf, const size_t idx)

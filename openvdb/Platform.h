@@ -153,11 +153,10 @@
     #endif
 #endif
 
-#define UNPACK(...) __VA_ARGS__
-
 #ifdef OPENVDB_USE_TBB
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_reduce.h>
+#include <tbb/parallel_sort.h>
 #define OPENVDB_FOR_EACH(func, range) \
 	(tbb::parallel_for((range), (func)))
 #define OPENVDB_FOR_EACH_PARTITION(func, range, partition) \
@@ -168,7 +167,12 @@
 	(tbb::parallel_reduce((range), (func), (seed)))
 #define OPENVDB_REDUCE_SEED_JOIN(func, range, seed, join) \
 	(tbb::parallel_reduce((range), (func), (seed), (join)))
+#define OPENVDB_SORT(begin, end) \
+	(tbb::parallel_sort((begin), (end)))
+#define OPENVDB_SORT_COMPARE(begin, end, compare) \
+	(tbb::parallel_sort((begin), (end), (compare)))
 #else
+#include <algorithm>
 #define OPENVDB_FOR_EACH(func, range) \
 	((func)(range))
 #define OPENVDB_FOR_EACH_PARTITION(func, range, partition) \
@@ -179,6 +183,10 @@
 	((func)((range), (seed)))
 #define OPENVDB_REDUCE_SEED_JOIN(func, range, seed, join) \
 	((func)((range), (seed)))
+#define OPENVDB_SORT(begin, end) \
+	(std::sort((begin), (end)))
+#define OPENVDB_SORT_COMPARE(begin, end, compare) \
+	(std::sort((begin), (end), (compare)))
 #endif
 
 /// All classes and public free standing functions must be explicitly marked

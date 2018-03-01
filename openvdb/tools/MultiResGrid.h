@@ -716,7 +716,7 @@ struct MultiResGrid<TreeType>::MaskOp
 
         // Restriction by injection using thread-local storage of coarse tree masks
         ManagerT leafs( mask );
-        tbb::parallel_for(leafs.leafRange( grainSize ), *this);
+		OPENVDB_FOR_EACH(*this, leafs.leafRange(grainSize));
 
         // multithreaded union of thread-local coarse tree masks with the coarse tree
         using IterT = typename PoolType::const_iterator;
@@ -767,11 +767,11 @@ struct MultiResGrid<TreeType>::FractionOp
 
         {// create mask from re-mapping coarse tree to mid-level tree
             tree::LeafManager<const TreeType> manager( *mTree1 );
-            tbb::parallel_for( manager.leafRange(grainSize), *this );
+			OPENVDB_FOR_EACH(*this, manager.leafRange(grainSize));
         }
 
         // Multi-threaded dilation of mask
-        tbb::parallel_for(tbb::blocked_range<PoolIterT>(mPool->begin(),mPool->end(),1), *this);
+        OPENVDB_FOR_EACH(*this, BlockedRange<PoolIterT>(mPool->begin(), mPool->end(), 1));
 
         // Union thread-local coarse tree masks into the coarse tree
         for (PoolIterT it=mPool->begin(); it!=mPool->end(); ++it) midTree.topologyUnion( *it );
@@ -779,7 +779,7 @@ struct MultiResGrid<TreeType>::FractionOp
 
         {// Interpolate values into the static mid level tree
             Manager2 manager( midTree );
-            tbb::parallel_for(manager.leafRange(grainSize), *this);
+            OPENVDB_FOR_EACH(*this, manager.leafRange(grainSize));
         }
     }
     void operator()(const Range1& range) const
@@ -805,7 +805,7 @@ struct MultiResGrid<TreeType>::FractionOp
             }//loop over active voxels in the fine tree
         }// loop over leaf nodes in the fine tree
     }
-    void operator()(const tbb::blocked_range<PoolIterT>& range) const
+    void operator()(const BlockedRange<PoolIterT>& range) const
     {
         for (PoolIterT it=range.begin(); it!=range.end(); ++it) {
             tools::dilateVoxels( *it, 1, NN_FACE_EDGE_VERTEX);
@@ -855,7 +855,7 @@ struct MultiResGrid<TreeType>::CookOp
     CookOp(const TreeType& srcTree, TreeType& dstTree, size_t grainSize): acc(srcTree)
     {
         ManagerT leafs(dstTree);
-        tbb::parallel_for(leafs.leafRange(grainSize), *this);
+        OPENVDB_FOR_EACH(*this, leafs.leafRange(grainSize));
     }
     CookOp(const CookOp &other): acc(other.acc.tree()) {}
 

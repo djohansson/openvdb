@@ -30,6 +30,7 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
+#include <openvdb/Types.h>
 #include <openvdb/Exceptions.h>
 #include <openvdb/util/CpuTimer.h>
 #include <openvdb/util/PagedArray.h>
@@ -58,13 +59,13 @@ public:
     void testCpuTimer();
     void testPagedArray();
 
-    using RangeT = BlockedRange<size_t>;
+    using RangeT = openvdb::BlockedRange<size_t>;
 
     // Multi-threading ArrayT::push_back
     template<typename ArrayT>
     struct ArrayPushBack {
         ArrayPushBack(ArrayT& array) : mArray(&array) {}
-        void parallel(size_t size) {tbb::parallel_for(RangeT(size_t(0), size, mArray->pageSize()), *this);}
+        void parallel(size_t size) { OPENVDB_FOR_EACH(*this, RangeT(size_t(0), size, mArray->pageSize())); }
         void serial(size_t size) { (*this)(RangeT(size_t(0), size)); }
         void unsafe(size_t size) { for (size_t i=0; i!=size; ++i) mArray->push_back_unsafe(i); }
         void operator()(const RangeT& r) const {
@@ -78,7 +79,7 @@ public:
     struct BufferPushBack {
         BufferPushBack(ArrayT& array) : mBuffer(array) {}
         void parallel(size_t size) {
-            tbb::parallel_for(RangeT(size_t(0), size, mBuffer.parent().pageSize()), *this);
+            OPENVDB_FOR_EACH(*this, RangeT(size_t(0), size, mBuffer.parent().pageSize()));
         }
         void serial(size_t size) { (*this)(RangeT(size_t(0), size)); }
         void operator()(const RangeT& r) const {
@@ -90,17 +91,17 @@ public:
     // Thread Local Storage version of BufferPushBack
     template<typename ArrayT>
     struct TLS_BufferPushBack {
-        using PoolT = EnumerableThreadSpecific<typename ArrayT::ValueBuffer>;
+        using PoolT = openvdb::EnumerableThreadSpecific<typename ArrayT::ValueBuffer>;
         TLS_BufferPushBack(ArrayT &array) : mArray(&array), mPool(nullptr) {}
         void parallel(size_t size) {
             typename ArrayT::ValueBuffer exemplar(*mArray);//dummy used for initialization
             mPool = new PoolT(exemplar);//thread local storage pool of ValueBuffers
-            tbb::parallel_for(RangeT(size_t(0), size, mArray->pageSize()), *this);
+            OPENVDB_FOR_EACH(*this, RangeT(size_t(0), size, mArray->pageSize()));
             for (auto i=mPool->begin(); i!=mPool->end(); ++i) i->flush();
             delete mPool;
         }
         void operator()(const RangeT& r) const {
-            typename PoolT::reference buffer = mPool->local();
+            auto& buffer = mPool->local();
             for (size_t i=r.begin(), n=r.end(); i!=n; ++i) buffer.push_back(i);
         }
         ArrayT *mArray;
@@ -225,9 +226,12 @@ TestUtil::testPagedArray()
         //    ArrayPushBack<ArrayT> tmp(d);
         //    tmp.parallel(problemSize);
         //}// is faster than:
-        tbb::parallel_for(BlockedRange<size_t>(0, problemSize, d.pageSize()),
-                          [&d](const BlockedRange<size_t> &range){
-                          for (size_t i=range.begin(); i!=range.end(); ++i) d.push_back(i);});
+		auto func = [&d](const openvdb::BlockedRange<size_t> &range)
+		{
+			for (size_t i = range.begin(); i != range.end(); ++i)
+				d.push_back(i);
+		};
+        OPENVDB_FOR_EACH(func, openvdb::BlockedRange<size_t>(0, problemSize, d.pageSize()));
 #ifdef BENCHMARK_PAGED_ARRAY
         timer.stop();
 #endif
@@ -318,6 +322,7 @@ TestUtil::testPagedArray()
         d2.resize(1234);
         CPPUNIT_ASSERT_EQUAL(size_t(1234), d2.size());
     }
+#ifdef OPENVDB_USE_TBB
     {//benchmark against a tbb::concurrent_vector::push_back
         timer.start("7: Serial tbb::concurrent_vector::push_back");
         tbb::concurrent_vector<size_t> v;
@@ -329,13 +334,18 @@ TestUtil::testPagedArray()
         v.clear();
         timer.start("8: Parallel tbb::concurrent_vector::push_back");
         using ArrayT = openvdb::util::PagedArray<size_t>;
-        tbb::parallel_for(BlockedRange<size_t>(0, problemSize, ArrayT::pageSize()),
-                          [&v](const BlockedRange<size_t> &range){
-                          for (size_t i=range.begin(); i!=range.end(); ++i) v.push_back(i);});
+		auto func = [&v](const openvdb::BlockedRange<size_t> &range)
+		{
+			for (size_t i = range.begin(); i != range.end(); ++i)
+				v.push_back(i);
+		};
+        OPENVDB_FOR_EACH(func, openvdb::BlockedRange<size_t>(0, problemSize, ArrayT::pageSize()));
         timer.stop();
-        tbb::parallel_sort(v.begin(), v.end());
-        for (size_t i=0; i<problemSize; ++i) CPPUNIT_ASSERT_EQUAL(i, v[i]);
+		OPENVDB_SORT(v.begin(), v.end());
+
+		for (size_t i=0; i<problemSize; ++i) CPPUNIT_ASSERT_EQUAL(i, v[i]);
     }
+#endif
 #endif
 
     {//serial PagedArray::ValueBuffer::push_back
@@ -508,10 +518,12 @@ TestUtil::testPagedArray()
         using ArrayT = openvdb::util::PagedArray<size_t>;
         ArrayT d, d2;
 
-        tbb::parallel_for(BlockedRange<size_t>(0, problemSize, d.pageSize()),
-                          [&d](const BlockedRange<size_t> &range){
-                          ArrayT::ValueBuffer buffer(d);
-                          for (size_t i=range.begin(); i!=range.end(); ++i) buffer.push_back(i);});
+		auto f0 = [&d](const openvdb::BlockedRange<size_t> &range)
+		{
+			ArrayT::ValueBuffer buffer(d);
+			for (size_t i = range.begin(); i != range.end(); ++i) buffer.push_back(i);
+		};
+        OPENVDB_FOR_EACH(f0, openvdb::BlockedRange<size_t>(0, problemSize, d.pageSize()));
         CPPUNIT_ASSERT_EQUAL(problemSize, d.size());
         CPPUNIT_ASSERT_EQUAL(size_t(1)<<d.log2PageSize(), d.pageSize());
         CPPUNIT_ASSERT_EQUAL((d.size()-1)>>d.log2PageSize(), d.pageCount()-1);
@@ -520,10 +532,12 @@ TestUtil::testPagedArray()
         d.push_back(problemSize);
         CPPUNIT_ASSERT(d.isPartiallyFull());
 
-        tbb::parallel_for(BlockedRange<size_t>(problemSize+1, 2*problemSize+1, d2.pageSize()),
-                          [&d2](const BlockedRange<size_t> &range){
-                          ArrayT::ValueBuffer buffer(d2);
-                          for (size_t i=range.begin(); i!=range.end(); ++i) buffer.push_back(i);});
+		auto f1 = [&d2](const openvdb::BlockedRange<size_t> &range)
+		{
+			ArrayT::ValueBuffer buffer(d2);
+			for (size_t i = range.begin(); i != range.end(); ++i) buffer.push_back(i);
+		};
+		OPENVDB_FOR_EACH(f1, openvdb::BlockedRange<size_t>(problemSize + 1, 2 * problemSize + 1, d2.pageSize()));
         //for (size_t i=d.size(), n=i+problemSize; i<n; ++i) d2.push_back(i);
         CPPUNIT_ASSERT(!d2.isPartiallyFull());
         CPPUNIT_ASSERT_EQUAL(problemSize, d2.size());

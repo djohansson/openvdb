@@ -164,7 +164,7 @@ namespace {
 
 ViewerImpl* sViewer = nullptr;
 ThreadManager* sThreadMgr = nullptr;
-tbb::mutex sLock;
+std::mutex sLock;
 
 
 #if GLFW_VERSION_MAJOR >= 3
@@ -254,7 +254,7 @@ Viewer
 init(const std::string& progName, bool background)
 {
     if (sViewer == nullptr) {
-        tbb::mutex::scoped_lock lock(sLock);
+        std::lock_guard<std::mutex> lock(sLock);
         if (sViewer == nullptr) {
             OPENVDB_START_THREADSAFE_STATIC_WRITE
             sViewer = new ViewerImpl;
@@ -265,7 +265,7 @@ init(const std::string& progName, bool background)
 
     if (background) {
         if (sThreadMgr == nullptr) {
-            tbb::mutex::scoped_lock lock(sLock);
+			std::lock_guard<std::mutex> lock(sLock);
             if (sThreadMgr == nullptr) {
                 OPENVDB_START_THREADSAFE_STATIC_WRITE
                 sThreadMgr = new ThreadManager;
@@ -274,7 +274,7 @@ init(const std::string& progName, bool background)
         }
     } else {
         if (sThreadMgr != nullptr) {
-            tbb::mutex::scoped_lock lock(sLock);
+			std::lock_guard<std::mutex> lock(sLock);
             delete sThreadMgr;
             OPENVDB_START_THREADSAFE_STATIC_WRITE
             sThreadMgr = nullptr;

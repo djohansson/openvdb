@@ -374,8 +374,11 @@ inline bool
 LevelSetTracker<GridT, InterruptT>::
 checkInterrupter()
 {
-    if (util::wasInterrupted(mInterrupter)) {
+    if (util::wasInterrupted(mInterrupter))
+	{
+#ifdef OPENVDB_USE_TBB
         tbb::task::self().cancel_group_execution();
+#endif
         return false;
     }
     return true;

@@ -47,8 +47,8 @@
 #include <map>
 #include <memory>
 #include <mutex>
-#include <thread>
 #include <type_traits>
+#include <vector>
 #if OPENVDB_ABI_VERSION_NUMBER <= 3
 #include <boost/shared_ptr.hpp>
 #include <boost/weak_ptr.hpp>
@@ -260,27 +260,30 @@ template <typename T>
 class Combinable
 {
 public:
+	using Type = T;
+	using ContainerType = typename std::vector<Type>;
+	using MutexType = std::mutex;
+
 	Combinable() { createLocal(); }
-	explicit Combinable(const T& val) { createLocal(val); }
-	~Combinable() { clear(); }
+	explicit Combinable(const T& val) { createLocalCopy(val); }
+	virtual ~Combinable() { clear(); }
 	
 	void clear()
 	{
+		mLocal = nullptr;
+
 		std::lock_guard<std::mutex> lock(sAllLocalsMutex);
-		
-		for (auto local : sAllLocals)
-			(*local).reset(nullptr);
 		
 		sAllLocals.clear();
 	}
 
-	T& local()
+	Type& local()
 	{
 		bool exists;
 		return local(exists);
 	}
 
-	T& local(bool& exists)
+	Type& local(bool& exists)
 	{
 		if (mLocal)
 		{
@@ -297,14 +300,14 @@ public:
 
 	auto size() const
 	{
-		std::lock_guard<std::mutex> lock(sAllLocalsMutex);
+		std::lock_guard<MutexType> lock(sAllLocalsMutex);
 
 		return sAllLocals.size();
 	}
 
 	bool empty() const
 	{
-		std::lock_guard<std::mutex> lock(sAllLocalsMutex);
+		std::lock_guard<MutexType> lock(sAllLocalsMutex);
 
 		return sAllLocals.empty();
 	}
@@ -312,14 +315,14 @@ public:
 	template<typename Function>
 	T combine(Function binaryCombineFcn) const
 	{
-		std::lock_guard<std::mutex> lock(sAllLocalsMutex);
+		std::lock_guard<MutexType> lock(sAllLocalsMutex);
 
 		if (sAllLocals.empty())
 			return T();
 		
 		T result;
-		for (auto local : sAllLocals)
-			result = binaryCombineFcn(result, *local);
+		for (auto& local : sAllLocals)
+			result = binaryCombineFcn(result, local);
 
 		return result;
 	}
@@ -327,34 +330,94 @@ public:
 	template<typename Function>
 	void combine_each(Function unaryCombineFunction) const
 	{
-		std::lock_guard<std::mutex> lock(sAllLocalsMutex);
+		std::lock_guard<MutexType> lock(sAllLocalsMutex);
 
-		for (auto local : sAllLocals)
-			unaryCombineFunction(*local);
+		for (auto& local : sAllLocals)
+			unaryCombineFunction(local);
 	}
 
-private:
+protected:
 
-	auto getThreadId() const 
+	void createLocal()
 	{
-		return std::this_thread::get_id();
+		std::lock_guard<MutexType> lock(sAllLocalsMutex);
+		
+		sAllLocals.emplace_back();
+		mLocal = &sAllLocals.back();
 	}
 
-	void createLocal(const T& val = T())
+	void createLocalCopy(const Type& val)
 	{
-		std::lock_guard<std::mutex> lock(sAllLocalsMutex);
+		std::lock_guard<MutexType> lock(sAllLocalsMutex);
 
-		mLocal = make_unique<T>(val);
-		sAllLocals[getThreadId()] = &mLocal;
+		sAllLocals.emplace_back(val);
+		mLocal = &sAllLocals.back();
 	}
 
-	thread_local static std::unique_ptr<T> mLocal;
-	static std::mutex sAllLocalsMutex;
-	static std::map<std::thread::id, std::unique_ptr<T>*> sAllLocals;
+	thread_local static Type* mLocal;
+	static MutexType sAllLocalsMutex;
+	static ContainerType sAllLocals;
 };
 
+template<typename T>
+std::mutex Combinable<T>::sAllLocalsMutex;
+
+template<typename T>
+std::vector<T> Combinable<T>::sAllLocals;
+
+template<typename T>
+thread_local T* Combinable<T>::mLocal(nullptr);
+
 template <typename T>
-using EnumerableThreadSpecific = typename Combinable<T>;
+class EnumerableThreadSpecific : public Combinable<T>
+{
+public:
+
+	using iterator = typename ContainerType::iterator;
+	using const_iterator = typename ContainerType::const_iterator;
+
+	EnumerableThreadSpecific() = default;
+	explicit EnumerableThreadSpecific(const T& val) : Combinable(val) { }
+	~EnumerableThreadSpecific() = default;
+
+	iterator begin()
+	{
+		std::lock_guard<MutexType> lock(sAllLocalsMutex);
+
+		return sAllLocals.begin();
+	}
+	iterator end()
+	{
+		std::lock_guard<MutexType> lock(sAllLocalsMutex);
+
+		return sAllLocals.end();
+	}
+	const_iterator cbegin() const
+	{
+		std::lock_guard<MutexType> lock(sAllLocalsMutex);
+
+		return sAllLocals.cbegin();
+	}
+	const_iterator cend() const
+	{
+		std::lock_guard<MutexType> lock(sAllLocalsMutex);
+
+		return sAllLocals.cend();
+	}
+
+	auto range(size_t grainsize = 1)
+	{
+		std::lock_guard<MutexType> lock(sAllLocalsMutex);
+
+		return BlockedRange(sAllLocals.begin(), sAllLocals.end(), grainsize);
+	}
+	const auto range(size_t grainsize = 1) const 
+	{
+		std::lock_guard<MutexType> lock(sAllLocalsMutex);
+
+		return BlockedRange(sAllLocals.cbegin(), sAllLocals.cend(), grainsize);
+	}
+};
 #endif
 
 

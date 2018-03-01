@@ -280,12 +280,14 @@ struct ComputeExtremas
     {
     }
 
+#ifdef OPENVDN_USE_TBB
     ComputeExtremas(ComputeExtremas& rhs, tbb::split)
         : particleArray(rhs.particleArray)
         , minRadius(std::numeric_limits<ScalarType>::max())
         , maxRadius(-std::numeric_limits<ScalarType>::max())
     {
     }
+#endif
 
     void operator()(const BlockedRange<size_t>& range) {
 
@@ -356,8 +358,7 @@ struct SplittableParticleArray
 
         std::unique_ptr<bool[]> mask{new bool[mSize]};
 
-        tbb::parallel_for(BlockedRange<size_t>(0, mSize),
-            MaskParticles(*this, mask, maxRadiusLimit));
+        OPENVDB_FOR_EACH(MaskParticles(*this, mask, maxRadiusLimit), BlockedRange<size_t>(0, mSize));
 
         Ptr output(new SplittableParticleArray(*this, mask));
         if (output->size() == 0) return Ptr();
@@ -770,9 +771,9 @@ ParticleAtlas<PointIndexGridType>::construct(
             nodes.clear();
             grid->tree().getNodes(nodes);
 
-            tbb::parallel_for(BlockedRange<size_t>(0, nodes.size()),
-                particle_atlas_internal::RemapIndices<SplittableParticleArray,
-                    PointIndexLeafNodeType>(particleArray, nodes));
+            OPENVDB_FOR_EACH(
+				(particle_atlas_internal::RemapIndices<SplittableParticleArray, PointIndexLeafNodeType>(particleArray, nodes)),
+				BlockedRange<size_t>(0, nodes.size()));
 
             mIndexGridArray.push_back(grid);
         }

@@ -45,10 +45,6 @@
 #include <openvdb/Grid.h>
 #include <openvdb/external/brigand.hpp>
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/parallel_sort.h>
-#endif
-
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -2520,17 +2516,11 @@ extractActiveVoxelSegmentMasks(const GridOrTreeType& volume,
 			BlockedRange<size_t>(0, segmentCount));
 
         size_t *begin = segmentOrderArray.get();
-#ifdef OPENVDB_USE_TBB
-        tbb::parallel_sort(
-			begin, 
-			begin + masks.size(),
-			level_set_util_internal::GreaterCount(voxelCountArray.get()));
-#else
-		std::sort(
+
+		OPENVDB_SORT_COMPARE(
 			begin,
 			begin + masks.size(),
 			level_set_util_internal::GreaterCount(voxelCountArray.get()));
-#endif
 
         std::vector<BoolTreePtrType> orderedMasks;
         orderedMasks.reserve(masks.size());

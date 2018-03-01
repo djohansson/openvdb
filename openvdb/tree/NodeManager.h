@@ -174,7 +174,7 @@ public:
     }
 
     template<typename NodeOp>
-    void reduce(NodeOp& op, size_t grainSize=1)
+    void reduce(NodeOp& op, bool threaded = true, size_t grainSize=1)
     {
         NodeReducer<NodeOp> transform(op);
         transform.run(this->nodeRange(grainSize), threaded);

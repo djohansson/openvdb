@@ -447,6 +447,7 @@ TestValueAccessor::constAccessorTest()
 void
 TestValueAccessor::testMultithreadedAccessor()
 {
+#ifdef OPENVDB_USE_TBB
 #define MAX_COORD 5000
 
     using AccessorT = openvdb::tree::ValueAccessorRW<Tree4Type>;
@@ -512,6 +513,7 @@ TestValueAccessor::testMultithreadedAccessor()
     tbb::task::spawn_root_and_wait(root);
 
 #undef MAX_COORD
+#endif
 }
 
 

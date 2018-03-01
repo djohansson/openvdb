@@ -60,10 +60,12 @@ struct NodeCountOp {
     NodeCountOp() : nodeCount(TreeT::DEPTH, 0), totalCount(0)
     {
     }
+#ifdef OPENVDB_USE_TBB
     NodeCountOp(const NodeCountOp&, tbb::split)
         : nodeCount(TreeT::DEPTH, 0), totalCount(0)
     {
     }
+#endif
     void join(const NodeCountOp& other)
     {
         for (size_t i = 0; i < nodeCount.size(); ++i) {

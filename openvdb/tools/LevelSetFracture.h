@@ -135,12 +135,14 @@ struct FindMinMaxVoxelValue {
     {
     }
 
+#ifdef OPENVDB_USE_TBB
     FindMinMaxVoxelValue(FindMinMaxVoxelValue& rhs, tbb::split)
         : minValue(std::numeric_limits<ValueType>::max())
         , maxValue(-minValue)
         , mNodes(rhs.mNodes)
     {
     }
+#endif
 
     void operator()(const BlockedRange<size_t>& range) {
         for (size_t n = range.begin(), N = range.end(); n < N; ++n) {

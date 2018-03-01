@@ -337,7 +337,7 @@ public:
 			return sum;
 		};
 		auto join = [](Index64 n, Index64 m) -> Index64 { return n + m; };
-        return OPENVDB_REDUCE(reduce, this->leafRange(), Index64(0), join);
+        return OPENVDB_REDUCE_SEED_JOIN(reduce, this->leafRange(), Index64(0), join);
     }
 
     /// Return a const reference to tree associated with this manager.
@@ -521,10 +521,10 @@ public:
     /// };
     /// @endcode
     template<typename LeafOp>
-    void foreach(const LeafOp& op, size_t grainSize=1)
+    void foreach(const LeafOp& op, bool threaded = true, size_t grainSize=1)
     {
         LeafTransformer<LeafOp> transform(op);
-        transform.run(this->leafRange(grainSize));
+        transform.run(this->leafRange(grainSize), threaded);
     }
 
     /// @brief   Threaded method that applies a user-supplied functor
@@ -570,10 +570,10 @@ public:
     ///
     /// @endcode
     template<typename LeafOp>
-    void reduce(LeafOp& op, size_t grainSize=1)
+    void reduce(LeafOp& op, bool threaded = true, size_t grainSize=1)
     {
         LeafReducer<LeafOp> transform(op);
-        transform.run(this->leafRange(grainSize));
+        transform.run(this->leafRange(grainSize), threaded);
     }
 
 
@@ -753,9 +753,9 @@ private:
         LeafTransformer(const LeafOp &leafOp) : mLeafOp(leafOp)
         {
         }
-        void run(const LeafRange &range) const
+        void run(const LeafRange &range, bool threaded) const
         {
-			OPENVDB_FOR_EACH(*this, range);
+			threaded ? OPENVDB_FOR_EACH(*this, range) : (*this)(range);
         }
         void operator()(const LeafRange &range) const
         {
@@ -779,9 +779,9 @@ private:
         }
 #endif
         ~LeafReducer() { if (mOwnsOp) delete mLeafOp; }
-        void run(const LeafRange& range)
+        void run(const LeafRange& range, bool threaded)
         {
-            OPENVDB_REDUCE(*this, range);
+			threaded ? OPENVDB_REDUCE(*this, range) : (*this)(range);
         }
         void operator()(const LeafRange& range)
         {

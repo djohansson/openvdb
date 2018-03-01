@@ -54,6 +54,7 @@
 #include <openvdb/math/Math.h>
 #include <openvdb/util/NullInterrupter.h>
 
+#include <algorithm>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -159,7 +160,8 @@ public:
         std::unique_ptr<Index64[]> idList{new Index64[mTargetPointCount]};
         math::RandInt<Index64, RandomGenerator> rand(BaseT::mRand01.engine(), 0, mVoxelCount-1);
         for (Index64 i=0; i<mTargetPointCount; ++i) idList[i] = rand();
-        tbb::parallel_sort(idList.get(), idList.get() + mTargetPointCount);
+
+		OPENVDB_SORT(idList.get(), idList.get() + mTargetPointCount);
 
         CoordBBox bbox;
         const Vec3R offset(0.5, 0.5, 0.5);

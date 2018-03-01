@@ -145,7 +145,9 @@ public:
 
     typename TreeT::Ptr tree() const { return mNewTree; }
 
+#ifdef OPENVDB_USE_TBB
     CopyLeafNodes(CopyLeafNodes&, tbb::split);
+#endif
     void operator()(const BlockedRange<size_t>&);
     void join(const CopyLeafNodes& rhs) { mNewTree->merge(*rhs.mNewTree); }
 
@@ -166,6 +168,7 @@ CopyLeafNodes<TreeT>::CopyLeafNodes(const TreeT& tree, const MaskLeafManagerT& l
 }
 
 
+#ifdef OPENVDB_USE_TBB
 template<typename TreeT>
 CopyLeafNodes<TreeT>::CopyLeafNodes(CopyLeafNodes& rhs, tbb::split)
     : mTree(rhs.mTree)
@@ -173,6 +176,7 @@ CopyLeafNodes<TreeT>::CopyLeafNodes(CopyLeafNodes& rhs, tbb::split)
     , mNewTree(new TreeT(mTree->background()))
 {
 }
+#endif
 
 
 template<typename TreeT>
@@ -521,7 +525,11 @@ clip(const GridType& inGrid, const math::NonlinearFrustumMap& frustumMap, bool k
                     // bounding box test is comparable to testing every voxel.
                     if (bboxVec.back().volume() > 64 && bboxVec.back().is_divisible()) {
                         // Subdivide this region in-place and append the other half to the list.
-                        bboxVec.emplace_back(bboxVec.back(), tbb::split{});
+                        bboxVec.emplace_back(bboxVec.back()
+#ifdef OPENVDB_USE_TBB
+							, tbb::split{}
+#endif
+						);
                         continue;
                     }
                     auto subBBox = bboxVec.back();

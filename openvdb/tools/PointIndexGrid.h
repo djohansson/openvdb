@@ -409,7 +409,7 @@ struct ValidPartitioningOp
 
                 mPoints->getPos(*begin, point);
                 if (voxelCoord != mTransform->worldToIndexCellCentered(point)) {
-                    mHasChanged->fetch_and_store(true);
+                    mHasChanged->exchange(true);
                     break;
                 }
 
@@ -443,7 +443,7 @@ struct PopulateLeafNodesOp
         using VoxelOffsetT = typename Partitioner::VoxelOffsetType;
 
         size_t maxPointCount = 0;
-        for (size_t n = range.first, N = range.second; n != N; ++n) {
+        for (size_t n = range.begin(), N = range.end(); n != N; ++n) {
             maxPointCount = std::max(maxPointCount, mPartitioner->indices(n).size());
         }
 
@@ -455,7 +455,7 @@ struct PopulateLeafNodesOp
 
         VoxelOffsetT const * const voxelOffsets = mPartitioner->voxelOffsets().get();
 
-        for (size_t n = range.first, N = range.second; n != N; ++n) {
+        for (size_t n = range.begin(), N = range.end(); n != N; ++n) {
 
             LeafNodeT* node = new LeafNodeT();
             node->setOrigin(mPartitioner->origin(n));

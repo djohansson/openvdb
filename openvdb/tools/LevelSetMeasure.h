@@ -47,10 +47,6 @@
 #include <algorithm>
 #include <type_traits>
 
-#ifdef OPENVDB_USE_TBB
-#include <tbb/parallel_sort.h>
-#endif
-
 
 namespace openvdb {
 OPENVDB_USE_VERSION_NAMESPACE
@@ -232,11 +228,9 @@ private:
     inline double reduce(double* first, double scale)
     {
         double* last = first + mLeafs->leafCount();
-#ifdef OPENVDB_USE_TBB
-        tbb::parallel_sort(first, last);//reduces catastrophic cancellation
-#else
-		std::sort(first, last);
-#endif
+		
+		OPENVDB_SORT(first, last);
+
         Real sum = 0.0;
         while(first != last) sum += *first++;
         return scale * sum;
@@ -384,8 +378,11 @@ template<typename GridT, typename InterruptT>
 inline bool
 LevelSetMeasure<GridT, InterruptT>::checkInterrupter()
 {
-    if (util::wasInterrupted(mInterrupter)) {
+    if (util::wasInterrupted(mInterrupter))
+	{
+#ifdef OPENVDB_USE_TBB
         tbb::task::self().cancel_group_execution();
+#endif
         return false;
     }
     return true;

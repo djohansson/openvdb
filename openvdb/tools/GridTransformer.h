@@ -780,6 +780,7 @@ public:
     ~RangeProcessor() { if (!mIsRoot) delete mOutTree; }
 
     /// Splitting constructor: don't copy the original processor's output tree
+#ifdef OPENVDB_USE_TBB
     RangeProcessor(RangeProcessor& other, tbb::split):
         mIsRoot(false),
         mXform(other.mXform),
@@ -790,6 +791,7 @@ public:
         mOutAcc(*mOutTree),
         mInterrupt(other.mInterrupt)
     {}
+#endif
 
     void setInterrupt(const InterruptFunc& f) { mInterrupt = f; }
 

@@ -222,6 +222,7 @@ private:
         {
         }
 
+#ifdef OPENVDB_USE_TBB
         ProcessInternalNodes(ProcessInternalNodes& other, tbb::split)
             : mLhsNodes(other.mLhsNodes)
             , mRhsTree(other.mRhsTree)
@@ -231,6 +232,7 @@ private:
             , mOutputLeafNodes(&mLocalLeafNodes)
         {
         }
+#endif
 
         void join(ProcessInternalNodes& other)
         {
@@ -295,6 +297,7 @@ private:
         {
         }
 
+#ifdef OPENVDB_USE_TBB
         ProcessLeafNodes(ProcessLeafNodes& other, tbb::split)
             : mLhsNodes(other.mLhsNodes)
             , mRhsTree(other.mRhsTree)
@@ -302,6 +305,7 @@ private:
             , mOutputTree(&mLocalTree)
         {
         }
+#endif
 
         void join(ProcessLeafNodes& rhs) { mOutputTree->merge(*rhs.mOutputTree); }
 
@@ -427,6 +431,7 @@ private:
         {
         }
 
+#ifdef OPENVDB_USE_TBB
         ProcessInternalNodes(ProcessInternalNodes& other, tbb::split)
             : mRhsNodes(other.mRhsNodes)
             , mLhsTree(other.mLhsTree)
@@ -436,6 +441,7 @@ private:
             , mOutputLeafNodes(&mLocalLeafNodes)
         {
         }
+#endif
 
         void join(ProcessInternalNodes& other)
         {
@@ -510,6 +516,7 @@ private:
         {
         }
 
+#ifdef OPENVDB_USE_TBB
         ProcessLeafNodes(ProcessLeafNodes& rhs, tbb::split)
             : mRhsNodes(rhs.mRhsNodes)
             , mLhsTree(rhs.mLhsTree)
@@ -517,6 +524,7 @@ private:
             , mOutputTree(&mLocalTree)
         {
         }
+#endif
 
         void join(ProcessLeafNodes& rhs) { mOutputTree->merge(*rhs.mOutputTree); }
 
@@ -572,10 +580,15 @@ doCSGCopy(const TreeType& lhs, const TreeType& rhs)
     BuildSecondarySegment<TreeType, Operation> secondary(lhs, rhs);
 
     // Exploiting nested parallelism
+#ifdef OPENVDB_USE_TBB
     tbb::task_group tasks;
     tasks.run(primary);
     tasks.run(secondary);
     tasks.wait();
+#else
+	primary();
+	secondary();
+#endif
 
     primary.segment()->merge(*secondary.segment());
 

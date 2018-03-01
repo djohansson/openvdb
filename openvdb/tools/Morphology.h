@@ -409,8 +409,8 @@ protected:
         MaskManager(std::vector<MaskType>& masks, ManagerType& manager)
             : mMasks(masks) , mManager(manager), mSaveMasks(true) {}
 
-        void save() { mSaveMasks = true; tbb::parallel_for(mManager.getRange(), *this); }
-        void update() { mSaveMasks = false; tbb::parallel_for(mManager.getRange(), *this); }
+        void save() { mSaveMasks = true; OPENVDB_FOR_EACH(*this, mManager.getRange()); }
+        void update() { mSaveMasks = false; OPENVDB_FOR_EACH(*this, mManager.getRange()); }
         void operator()(const BlockedRange<size_t>& range) const
         {
             if (mSaveMasks) {
@@ -432,7 +432,7 @@ protected:
     struct UpdateMasks {
         UpdateMasks(const std::vector<MaskType>& masks, ManagerType& manager)
             : mMasks(masks), mManager(manager) {}
-        void update() { tbb::parallel_for(mManager.getRange(), *this); }
+        void update() { OPENVDB_FOR_EACH(*this, mManager.getRange()); }
         void operator()(const BlockedRange<size_t>& r) const {
             for (size_t i=r.begin(); i<r.end(); ++i) mManager.leaf(i).setValueMask(mMasks[i]);
         }
@@ -716,7 +716,7 @@ Morphology<TreeType>::ErodeVoxelsOp::runParallel(NearestNeighbors nn)
     default:
         mTask = std::bind(&ErodeVoxelsOp::erode6, ph::_1, ph::_2);
     }
-    tbb::parallel_for(mManager.getRange(), *this);
+    OPENVDB_FOR_EACH(*this, mManager.getRange());
 }
 
 

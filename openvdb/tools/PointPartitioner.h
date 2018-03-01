@@ -1043,14 +1043,14 @@ PointPartitioner<PointIndexType, BucketLog2Dim>::construct(
     mPageCoordinates.reset(new Coord[mPageCount]);
 
 	OPENVDB_FOR_EACH(
-		point_partitioner_internal::LeafNodeOriginOp<PointArray, IndexType>(
-			mPageCoordinates, mPointIndices, mPageOffsets, points, xform, BucketLog2Dim, cellCenteredTransform),
+		(point_partitioner_internal::LeafNodeOriginOp<PointArray, IndexType>(
+			mPageCoordinates, mPointIndices, mPageOffsets, points, xform, BucketLog2Dim, cellCenteredTransform)),
 		pageRange);
 
     if (mVoxelOffsets && voxelOrder) {
 		OPENVDB_FOR_EACH(
-			point_partitioner_internal::VoxelOrderOp<IndexType, BucketLog2Dim>(
-				mPointIndices, mPageOffsets, mVoxelOffsets),
+			(point_partitioner_internal::VoxelOrderOp<IndexType, BucketLog2Dim>(
+				mPointIndices, mPageOffsets, mVoxelOffsets)),
 			pageRange);
     }
 

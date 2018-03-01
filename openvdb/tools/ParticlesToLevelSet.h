@@ -437,6 +437,7 @@ struct ParticlesToLevelSet<SdfGridT, AttributeT, InterrupterT>::Raster
     }
 
     /// @brief Copy constructor called by tbb threads
+#ifdef OPENVDB_USE_TBB
     Raster(Raster& other, tbb::split)
         : mParent(other.mParent)
         , mParticles(other.mParticles)
@@ -450,6 +451,7 @@ struct ParticlesToLevelSet<SdfGridT, AttributeT, InterrupterT>::Raster
     {
         mGrid->newTree();
     }
+#endif
 
     virtual ~Raster() {
 
@@ -615,8 +617,11 @@ private:
                 const Coord b(math::Ceil( P[0]+max),math::Ceil( P[1]+max),math::Ceil( P[2]+max));
                 for (Coord c = a; c.x() <= b.x(); ++c.x()) {
                     //only check interrupter every 32'th scan in x
-                    if (!(count++ & ((1<<5)-1)) && util::wasInterrupted(mParent.mInterrupter)) {
+                    if (!(count++ & ((1<<5)-1)) && util::wasInterrupted(mParent.mInterrupter))
+					{
+#ifdef OPENVDB_USE_TBB
                         tbb::task::self().cancel_group_execution();
+#endif
                         return;
                     }
                     SdfT x2 = static_cast<SdfT>(math::Pow2(c.x() - P[0]));
@@ -721,8 +726,11 @@ private:
         size_t count = 0;
         for ( Coord c = a; c.x() <= b.x(); ++c.x() ) {
             //only check interrupter every 32'th scan in x
-            if (!(count++ & ((1<<5)-1)) && util::wasInterrupted(mParent.mInterrupter)) {
+            if (!(count++ & ((1<<5)-1)) && util::wasInterrupted(mParent.mInterrupter))
+			{
+#ifdef OPENVDB_USE_TBB
                 tbb::task::self().cancel_group_execution();
+#endif
                 return false;
             }
             SdfT x2 = SdfT(math::Pow2(c.x() - P[0]));

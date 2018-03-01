@@ -1152,8 +1152,14 @@ template<typename ValueType>
 inline void
 fillArray(ValueType* array, const ValueType val, const size_t length)
 {
+	const int threadCount =
+#ifdef OPENVDB_USE_TBB
+		tbb::task_scheduler_init::default_num_threads()
+#else
+		1;
+#endif
     const auto grainSize = std::max<size_t>(
-        length / tbb::task_scheduler_init::default_num_threads(), 1024);
+        length / threadCount, 1024);
     const BlockedRange<size_t> range(0, length, grainSize);
 	OPENVDB_FOR_EACH_PARTITION(
 		FillArray<ValueType>(array, val),
@@ -1904,10 +1910,15 @@ combineData(DistTreeType& lhsDist, IndexTreeType& lhsIdx,
     std::vector<IndexLeafNodeType*> overlappingIdxNodes;
 
     // Steal unique leafnodes
+#ifdef OPENVDB_USE_TBB
     tbb::task_group tasks;
     tasks.run(StealUniqueLeafNodes<DistTreeType>(lhsDist, rhsDist, overlappingDistNodes));
     tasks.run(StealUniqueLeafNodes<IndexTreeType>(lhsIdx, rhsIdx, overlappingIdxNodes));
     tasks.wait();
+#else
+	StealUniqueLeafNodes<DistTreeType>(lhsDist, rhsDist, overlappingDistNodes)();
+	StealUniqueLeafNodes<IndexTreeType>(lhsIdx, rhsIdx, overlappingIdxNodes)();
+#endif
 
     // Combine overlapping leaf nodes
     if (!overlappingDistNodes.empty() && !overlappingIdxNodes.empty()) {
@@ -2001,8 +2012,11 @@ public:
 
         for (size_t n = range.begin(), N = range.end(); n < N; ++n) {
 
-            if (this->wasInterrupted()) {
+            if (this->wasInterrupted())
+			{
+#ifdef OPENVDB_USE_TBB
                 tbb::task::self().cancel_group_execution();
+#endif
                 break;
             }
 
@@ -2099,7 +2113,9 @@ private:
         subdivisionCount -= 1;
         polygonCount *= 4;
 
+#ifdef OPENVDB_USE_TBB
         tbb::task_group tasks;
+#endif
 
         const Vec3d ac = (mainPrim.a + mainPrim.c) * 0.5;
         const Vec3d bc = (mainPrim.b + mainPrim.c) * 0.5;
@@ -2111,24 +2127,42 @@ private:
         prim.a = mainPrim.a;
         prim.b = ab;
         prim.c = ac;
+#ifdef OPENVDB_USE_TBB
         tasks.run(SubTask(prim, dataTable, subdivisionCount, polygonCount));
+#else
+		SubTask(prim, dataTable, subdivisionCount, polygonCount)();
+#endif
 
         prim.a = ab;
         prim.b = bc;
         prim.c = ac;
+#ifdef OPENVDB_USE_TBB
         tasks.run(SubTask(prim, dataTable, subdivisionCount, polygonCount));
+#else
+		SubTask(prim, dataTable, subdivisionCount, polygonCount)();
+#endif
 
         prim.a = ab;
         prim.b = mainPrim.b;
         prim.c = bc;
+#ifdef OPENVDB_USE_TBB
         tasks.run(SubTask(prim, dataTable, subdivisionCount, polygonCount));
+#else
+		SubTask(prim, dataTable, subdivisionCount, polygonCount)();
+#endif
 
         prim.a = ac;
         prim.b = bc;
         prim.c = mainPrim.c;
+#ifdef OPENVDB_USE_TBB
         tasks.run(SubTask(prim, dataTable, subdivisionCount, polygonCount));
+#else
+		SubTask(prim, dataTable, subdivisionCount, polygonCount)();
+#endif
 
+#ifdef OPENVDB_USE_TBB
         tasks.wait();
+#endif
     }
 
     static void voxelizeTriangle(const Triangle& prim, VoxelizationDataType& data)
@@ -2780,10 +2814,15 @@ expandNarrowband(
 		uvmOp,
 		BlockedRange<size_t>(0, expandOp.updatedIndexNodes().size()));
 
+#ifdef OPENVDB_USE_TBB
     tbb::task_group tasks;
     tasks.run(AddNodes<TreeType>(distTree, expandOp.newDistNodes()));
     tasks.run(AddNodes<Int32TreeType>(indexTree, expandOp.newIndexNodes()));
     tasks.wait();
+#else
+	AddNodes<TreeType>(distTree, expandOp.newDistNodes())();
+	AddNodes<Int32TreeType>(indexTree, expandOp.newIndexNodes())();
+#endif
 
     maskTree.clear();
     maskTree.merge(expandOp.newMaskTree());
@@ -3084,8 +3123,10 @@ traceExteriorBoundaries(FloatTreeT& tree)
         }
 
         if (nodesUpdated) {
-			OPENVDB_FOR_EACH(nodeRange, mesh_to_volume_internal::SyncVoxelMask<FloatTreeT>(
-                nodeConnectivity.nodes(), changedNodeMaskA.get(), changedVoxelMask.get()));
+			OPENVDB_FOR_EACH(
+				mesh_to_volume_internal::SyncVoxelMask<FloatTreeT>(
+					nodeConnectivity.nodes(), changedNodeMaskA.get(), changedVoxelMask.get()),
+				nodeRange);
         }
     } while (nodesUpdated);
 
@@ -3202,7 +3243,7 @@ meshToVolume(
 			polygonRange);
 
         for (typename DataTable::iterator i = data.begin(); i != data.end(); ++i) {
-            VoxelizationDataType& dataItem = **i;
+         	VoxelizationDataType& dataItem = **i;
             mesh_to_volume_internal::combineData(
                 distTree, indexTree, dataItem.distTree, dataItem.indexTree);
         }

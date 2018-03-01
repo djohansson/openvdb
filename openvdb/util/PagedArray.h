@@ -43,6 +43,7 @@
 #define OPENVDB_UTIL_PAGED_ARRAY_HAS_BEEN_INCLUDED
 
 #include <openvdb/version.h>
+#include <atomic>
 #include <vector>
 #include <cassert>
 #include <iostream>
@@ -232,7 +233,7 @@ public:
     /// @details Constant time complexity. May allocate a new page.
     size_t push_back(const ValueType& value)
     {
-        const size_t index = mSize.fetch_and_increment();
+        const size_t index = mSize++;
         if (index >= mCapacity) this->grow(index);
         (*mPageTable[index >> Log2PageSize])[index] = value;
         return index;
@@ -247,7 +248,7 @@ public:
     /// @warning Not thread-safe!
     size_t push_back_unsafe(const ValueType& value)
     {
-        const size_t index = mSize.fetch_and_increment();
+        const size_t index = mSize++;
         if (index >= mCapacity) {
             mPageTable.push_back( new Page() );
             mCapacity += Page::Size;
@@ -297,7 +298,7 @@ public:
         auto op = [&](const BlockedRange<size_t>& r){
             for(size_t i=r.begin(); i!=r.end(); ++i) mPageTable[i]->fill(v);
         };
-        tbb::parallel_for(BlockedRange<size_t>(0, this->pageCount()), op);
+        OPENVDB_FOR_EACH(op, BlockedRange<size_t>(0, this->pageCount()));
     }
 
     /// @brief Copy the first @a count values in this PageArray into
@@ -317,10 +318,10 @@ public:
             }
         };
         if (size_t m = count & Page::Mask) {//count is not divisible by page size
-            tbb::parallel_for(BlockedRange<size_t>(0, last_page, 32), op);
+            OPENVDB_FOR_EACH(op, BlockedRange<size_t>(0, last_page, 32));
             mPageTable[last_page]->copy(p+last_page*Page::Size, m);
         } else {
-            tbb::parallel_for(BlockedRange<size_t>(0, last_page+1, 32), op);
+            OPENVDB_FOR_EACH(op, BlockedRange<size_t>(0, last_page + 1, 32));
         }
         return true;
     }
@@ -446,10 +447,10 @@ public:
     //@}
 
     /// @brief Parallel sort of all the elements in ascending order.
-    void sort() { tbb::parallel_sort(this->begin(), this->end(), std::less<ValueT>() ); }
+    void sort() { OPENVDB_SORT_COMPARE(this->begin(), this->end(), std::less<ValueT>()); }
 
     /// @brief Parallel sort of all the elements in descending order.
-    void invSort() { tbb::parallel_sort(this->begin(), this->end(), std::greater<ValueT>()); }
+    void invSort() { OPENVDB_SORT_COMPARE(this->begin(), this->end(), std::greater<ValueT>()); }
 
     //@{
     /// @brief Parallel sort of all the elements based on a custom
@@ -457,7 +458,7 @@ public:
     /// @code bool operator()(const ValueT& a, const ValueT& b) @endcode
     /// which returns true if a comes before b.
     template <typename Functor>
-    void sort(Functor func) { tbb::parallel_sort(this->begin(), this->end(), func ); }
+    void sort(Functor func) { OPENVDB_SORT_COMPARE(this->begin(), this->end(), func); }
     //@}
 
     /// @brief Transfer all the elements (and pages) from the other array to this array.
@@ -596,6 +597,8 @@ ValueBuffer
 {
 public:
     using PagedArrayType = PagedArray<ValueT, Log2PageSize, TableT>;
+
+	ValueBuffer() : mParent(nullptr), mPage(new Page()), mSize(0) {}
     /// @brief Constructor from a PageArray
     ValueBuffer(PagedArray& parent) : mParent(&parent), mPage(new Page()), mSize(0) {}
     /// @warning This copy-constructor is shallow in the sense that no

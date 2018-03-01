@@ -183,7 +183,9 @@ public:
     const ValueType& minVoxel() const { return mMin; }
     const ValueType& maxVoxel() const { return mMax; }
 
+#ifdef OPENVDB_USE_TBB
     inline MinMaxVoxel(const MinMaxVoxel<TreeType>&, tbb::split);
+#endif
     inline void operator()(const BlockedRange<size_t>&);
     inline void join(const MinMaxVoxel<TreeType>&);
 
@@ -202,6 +204,7 @@ MinMaxVoxel<TreeType>::MinMaxVoxel(LeafArray& leafs)
 }
 
 
+#ifdef OPENVDB_USE_TBB
 template <class TreeType>
 inline
 MinMaxVoxel<TreeType>::MinMaxVoxel(const MinMaxVoxel<TreeType>& rhs, tbb::split)
@@ -210,6 +213,7 @@ MinMaxVoxel<TreeType>::MinMaxVoxel(const MinMaxVoxel<TreeType>& rhs, tbb::split)
     , mMax(-mMin)
 {
 }
+#endif
 
 
 template <class TreeType>
@@ -852,7 +856,7 @@ public:
 
     void runParallel()
     {
-        tbb::parallel_for(mLeafs.getRange(), *this);
+        OPENVDB_FOR_EACH(*this, mLeafs.getRange());
     }
 
 
@@ -1020,7 +1024,7 @@ public:
 
     void runParallel()
     {
-        tbb::parallel_for(BlockedRange<size_t>(0, (mPoints.size() / 3)), *this);
+        OPENVDB_FOR_EACH(*this, BlockedRange<size_t>(0, (mPoints.size() / 3)));
     }
 
     inline void operator()(const BlockedRange<size_t>& range) const

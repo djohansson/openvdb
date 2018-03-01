@@ -373,7 +373,9 @@ LeafBuffer<T, Log2Dim>::swap(LeafBuffer& other)
 {
     std::swap(mData, other.mData);
 #if OPENVDB_ABI_VERSION_NUMBER >= 3
-    std::swap(mOutOfCore, other.mOutOfCore);
+	auto tmp = mOutOfCore.load();
+    mOutOfCore = other.mOutOfCore.load();
+	other.mOutOfCore = tmp;
 #endif
 }
 

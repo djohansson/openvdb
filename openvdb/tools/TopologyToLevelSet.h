@@ -197,8 +197,9 @@ smoothLevelSet(GridType& grid, int iterations, int halfBandWidthInVoxels, Interr
 
     const ValueType offset = ValueType(double(0.5) * grid.transform().voxelSize()[0]);
 
-    tbb::parallel_for(BlockedRange<size_t>(0, nodes.size()),
-        OffsetAndMinComp<TreeType>(nodes, filterGrid.tree(), -offset));
+    OPENVDB_FOR_EACH(
+		OffsetAndMinComp<TreeType>(nodes, filterGrid.tree(), -offset),
+		BlockedRange<size_t>(0, nodes.size()));
 
     // Clean up any damanage that was done by the min operation
     normalizeLevelSet(grid, halfBandWidthInVoxels, interrupt);
@@ -241,10 +242,15 @@ topologyToLevelSet(const GridT& grid, int halfWidth, int closingSteps, int dilat
     typename FloatTreeT::Ptr lsTree(
         new FloatTreeT( maskTree, /*out=*/background, /*in=*/-background, openvdb::TopologyCopy() ) );
 
+#ifdef OPENVDB_USE_TBB
     tbb::task_group pool;
     pool.run( ttls_internal::ErodeOp< MaskTreeT >( maskTree, halfWidth ) );
     pool.run( ttls_internal::DilateOp<FloatTreeT>( *lsTree , halfWidth ) );
     pool.wait();// wait for both tasks to complete
+#else
+	ttls_internal::ErodeOp< MaskTreeT >(maskTree, halfWidth)();
+	ttls_internal::DilateOp<FloatTreeT>(*lsTree, halfWidth)();
+#endif
 
     lsTree->topologyDifference( maskTree );
     tools::pruneLevelSet( *lsTree,  /*threading=*/true);

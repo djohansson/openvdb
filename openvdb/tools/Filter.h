@@ -443,8 +443,11 @@ template<typename GridT, typename MaskT, typename InterruptT>
 inline bool
 Filter<GridT, MaskT, InterruptT>::wasInterrupted()
 {
-    if (util::wasInterrupted(mInterrupter)) {
+    if (util::wasInterrupted(mInterrupter))
+	{
+#ifdef OPENVDB_USE_TBB
         tbb::task::self().cancel_group_execution();
+#endif
         return true;
     }
     return false;

@@ -184,7 +184,7 @@ public:
 
         if (mInterrupter) mInterrupter->start("Advecting points by OpenVDB velocity field: ");
         if (mThreaded) {
-            tbb::parallel_for(BlockedRange<size_t>(0, mPoints->size()), *this);
+            OPENVDB_FOR_EACH(*this, BlockedRange<size_t>(0, mPoints->size()));
         } else {
             (*this)(BlockedRange<size_t>(0, mPoints->size()));
         }
@@ -194,9 +194,10 @@ public:
     /// Never call this method directly - it is use by TBB and has to be public!
     void operator() (const BlockedRange<size_t> &range) const
     {
-        if (mInterrupter && mInterrupter->wasInterrupted()) {
+#ifdef OPENVDB_USE_TBB
+        if (mInterrupter && mInterrupter->wasInterrupted())
             tbb::task::self().cancel_group_execution();
-        }
+#endif
 
         VelocityFieldIntegrator  velField(*mVelGrid);
         switch (mIntegrationOrder) {
@@ -323,7 +324,7 @@ public:
         const size_t N = mPoints->size();
 
         if (mThreaded) {
-            tbb::parallel_for(BlockedRange<size_t>(0, N), *this);
+            OPENVDB_FOR_EACH(*this, BlockedRange<size_t>(0, N));
         } else {
             (*this)(BlockedRange<size_t>(0, N));
         }
@@ -334,9 +335,10 @@ public:
     /// Never call this method directly - it is use by TBB and has to be public!
     void operator() (const BlockedRange<size_t> &range) const
     {
-        if (mInterrupter && mInterrupter->wasInterrupted()) {
+#ifdef OPENVDB_USE_TBB
+        if (mInterrupter && mInterrupter->wasInterrupted())
             tbb::task::self().cancel_group_execution();
-        }
+#endif
 
         VelocityIntegratorType velField(*mVelGrid);
         ClosestPointProjectorType cptField(*mCptGrid, mCptIter);

@@ -1193,14 +1193,21 @@ InactiveVoxelValues<TreeType>::operator()(const BlockedRange<size_t>& range)
 {
     typename TreeType::LeafNodeType::ValueOffCIter iter;
 
-    for (size_t n = range.begin(); n < range.end() && !tbb::task::self().is_cancelled(); ++n) {
+    for (size_t n = range.begin(); n < range.end(); ++n)
+	{
+#ifdef OPENVDB_USE_TBB
+		if (tbb::task::self().is_cancelled())
+			break;
+#endif
         for (iter = mLeafArray.leaf(n).cbeginValueOff(); iter; ++iter) {
             mInactiveValues.insert(iter.getValue());
         }
 
+#ifdef OPENVDB_USE_TBB
         if (mInactiveValues.size() > mNumValues) {
             tbb::task::self().cancel_group_execution();
         }
+#endif
     }
 }
 
@@ -1288,15 +1295,23 @@ template<typename TreeType>
 inline void
 InactiveTileValues<TreeType>::operator()(IterRange& range)
 {
-    for (; range && !tbb::task::self().is_cancelled(); ++range) {
+    for (; range; ++range)
+	{
+#ifdef OPENVDB_USE_TBB
+		if (tbb::task::self().is_cancelled())
+			break;
+#endif
+
         typename TreeType::ValueOffCIter iter = range.iterator();
         for (; iter; ++iter) {
             mInactiveValues.insert(iter.getValue());
         }
 
+#ifdef OPENVDB_USE_TBB
         if (mInactiveValues.size() > mNumValues) {
             tbb::task::self().cancel_group_execution();
         }
+#endif
     }
 }
 

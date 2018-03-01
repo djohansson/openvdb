@@ -413,10 +413,16 @@ template<typename ValueType>
 inline void
 fillArray(ValueType* array, const ValueType& val, const size_t length)
 {
+	int threadCount =
+#ifdef OPENVDB_USE_TBB
+		tbb::task_scheduler_init::default_num_threads();
+#else
+		1;
+#endif
     const auto grainSize = std::max<size_t>(
-        length / tbb::task_scheduler_init::default_num_threads(), 1024);
+        length / threadCount, 1024);
     const BlockedRange<size_t> range(0, length, grainSize);
-    tbb::parallel_for(range, FillArray<ValueType>(array, val), tbb::simple_partitioner());
+    OPENVDB_FOR_EACH_PARTITION(FillArray<ValueType>(array, val), range, SimplePartitioner());
 }
 
 
@@ -2085,8 +2091,7 @@ markSeamLineData(SignDataTreeType& signFlagsTree, const SignDataTreeType& refSig
 
     const BlockedRange<size_t> nodeRange(0, signFlagsLeafNodes.size());
 
-    tbb::parallel_for(nodeRange,
-        SetSeamLineFlags<SignDataTreeType>(signFlagsLeafNodes, refSignFlagsTree));
+    OPENVDB_FOR_EACH(SetSeamLineFlags<SignDataTreeType>(signFlagsLeafNodes, refSignFlagsTree), nodeRange);
 
     BoolTreeType seamLineMaskTree(false);
 
@@ -2096,7 +2101,7 @@ markSeamLineData(SignDataTreeType& signFlagsTree, const SignDataTreeType& refSig
 	OPENVDB_REDUCE(maskSeamLine, nodeRange);
 
     OPENVDB_FOR_EACH(
-		TransferSeamLineFlags<BoolTreeType, SignDataType>(signFlagsLeafNodes, seamLineMaskTree),
+		(TransferSeamLineFlags<BoolTreeType, SignDataType>(signFlagsLeafNodes, seamLineMaskTree)),
 		nodeRange);
 }
 
@@ -3716,9 +3721,10 @@ applySurfaceMask(
         std::vector<BoolLeafNodeType*> intersectionLeafNodes;
         intersectionTree.getNodes(intersectionLeafNodes);
 
-        tbb::parallel_for(BlockedRange<size_t>(0, intersectionLeafNodes.size()),
+        OPENVDB_FOR_EACH(
             MaskSurface<BoolTreeType>(
-                intersectionLeafNodes, maskTree, transform, maskTransform, invertMask));
+                intersectionLeafNodes, maskTree, transform, maskTransform, invertMask),
+			BlockedRange<size_t>(0, intersectionLeafNodes.size()));
 
 
         // mask surface-mask border
@@ -3740,8 +3746,9 @@ applySurfaceMask(
         std::vector<BoolLeafNodeType*> tmpIntersectionLeafNodes;
         tmpIntersectionTree.getNodes(tmpIntersectionLeafNodes);
 
-        tbb::parallel_for(BlockedRange<size_t>(0, tmpIntersectionLeafNodes.size()),
-            SyncMaskValues<BoolTreeType>(tmpIntersectionLeafNodes, intersectionTree));
+        OPENVDB_FOR_EACH(
+			SyncMaskValues<BoolTreeType>(tmpIntersectionLeafNodes, intersectionTree),
+			BlockedRange<size_t>(0, tmpIntersectionLeafNodes.size()));
 
         intersectionTree.clear();
         intersectionTree.merge(tmpIntersectionTree);
@@ -4420,8 +4427,9 @@ subdivideNonplanarSeamLineQuads(
 
     std::unique_ptr<unsigned[]> numQuadsToDivide(new unsigned[polygonPoolListSize]);
 
-    tbb::parallel_for(polygonPoolListRange,
-        FlagAndCountQuadsToSubdivide(polygonPoolList, pointFlags, pointList, numQuadsToDivide));
+    OPENVDB_FOR_EACH(
+		FlagAndCountQuadsToSubdivide(polygonPoolList, pointFlags, pointList, numQuadsToDivide),
+		polygonPoolListRange);
 
     std::unique_ptr<unsigned[]> centroidOffsets(new unsigned[polygonPoolListSize]);
 
@@ -4438,9 +4446,9 @@ subdivideNonplanarSeamLineQuads(
 
     std::unique_ptr<Vec3s[]> centroidList(new Vec3s[centroidCount]);
 
-    tbb::parallel_for(polygonPoolListRange,
-        SubdivideQuads(polygonPoolList, pointList, pointListSize,
-            centroidList, numQuadsToDivide, centroidOffsets));
+    OPENVDB_FOR_EACH(
+		SubdivideQuads(polygonPoolList, pointList, pointListSize, centroidList, numQuadsToDivide, centroidOffsets),
+		polygonPoolListRange);
 
     if (centroidCount > 0) {
 
@@ -4448,11 +4456,13 @@ subdivideNonplanarSeamLineQuads(
 
         std::unique_ptr<openvdb::Vec3s[]> newPointList(new openvdb::Vec3s[newPointListSize]);
 
-        tbb::parallel_for(BlockedRange<size_t>(0, pointListSize),
-            CopyArray<Vec3s>(newPointList.get(), pointList.get()));
+        OPENVDB_FOR_EACH(
+			CopyArray<Vec3s>(newPointList.get(), pointList.get()),
+			BlockedRange<size_t>(0, pointListSize));
 
-        tbb::parallel_for(BlockedRange<size_t>(0, newPointListSize - pointListSize),
-            CopyArray<Vec3s>(newPointList.get(), centroidList.get(), pointListSize));
+        OPENVDB_FOR_EACH(
+			CopyArray<Vec3s>(newPointList.get(), centroidList.get(), pointListSize),
+			BlockedRange<size_t>(0, newPointListSize - pointListSize));
 
         pointListSize = newPointListSize;
         pointList.swap(newPointList);
@@ -4525,8 +4535,9 @@ inline void
 reviseSeamLineFlags(PolygonPoolList& polygonPoolList, size_t polygonPoolListSize,
     std::vector<uint8_t>& pointFlags)
 {
-    tbb::parallel_for(BlockedRange<size_t>(0, polygonPoolListSize),
-        ReviseSeamLineFlags(polygonPoolList, pointFlags));
+    OPENVDB_FOR_EACH(
+		ReviseSeamLineFlags(polygonPoolList, pointFlags),
+		BlockedRange<size_t>(0, polygonPoolListSize));
 }
 
 
@@ -4625,9 +4636,10 @@ relaxDisorientedTriangles(
     std::unique_ptr<uint8_t[]> pointMask(new uint8_t[pointListSize]);
     fillArray(pointMask.get(), uint8_t(0), pointListSize);
 
-    tbb::parallel_for(polygonPoolListRange,
-        MaskDisorientedTrianglePoints<InputTree>(
-            inputTree, polygonPoolList, pointList, pointMask, transform, invertSurfaceOrientation));
+    OPENVDB_FOR_EACH(
+		MaskDisorientedTrianglePoints<InputTree>(
+            inputTree, polygonPoolList, pointList, pointMask, transform, invertSurfaceOrientation),
+		polygonPoolListRange);
 
     std::unique_ptr<uint8_t[]> pointUpdates(new uint8_t[pointListSize]);
     fillArray(pointUpdates.get(), uint8_t(0), pointListSize);
@@ -5025,9 +5037,10 @@ VolumeToMesh::operator()(const InputGridType& inputGrid)
                 std::unique_ptr<Index32[]> leafNodeOffsets(
                     new Index32[refSignFlagsLeafNodes.size()]);
 
-                tbb::parallel_for(BlockedRange<size_t>(0, refSignFlagsLeafNodes.size()),
-                    volume_to_mesh_internal::LeafNodePointCount<Int16LeafNodeType::LOG2DIM>(
-                        refSignFlagsLeafNodes, leafNodeOffsets));
+                OPENVDB_FOR_EACH(
+					volume_to_mesh_internal::LeafNodePointCount<Int16LeafNodeType::LOG2DIM>(
+                        refSignFlagsLeafNodes, leafNodeOffsets),
+					BlockedRange<size_t>(0, refSignFlagsLeafNodes.size()));
 
                 {
                     Index32 count = 0;
@@ -5048,18 +5061,20 @@ VolumeToMesh::operator()(const InputGridType& inputGrid)
                     std::vector<Index32LeafNodeType*> refPointIndexLeafNodes;
                     refPointIndexTree->getNodes(refPointIndexLeafNodes);
 
-                    tbb::parallel_for(BlockedRange<size_t>(0, refPointIndexLeafNodes.size()),
-                        volume_to_mesh_internal::MapPoints<Index32LeafNodeType>(
-                            refPointIndexLeafNodes, refSignFlagsLeafNodes, leafNodeOffsets));
+                    OPENVDB_FOR_EACH(
+						volume_to_mesh_internal::MapPoints<Index32LeafNodeType>(
+                            refPointIndexLeafNodes, refSignFlagsLeafNodes, leafNodeOffsets),
+						BlockedRange<size_t>(0, refPointIndexLeafNodes.size()));
                 }
             }
 
             if (mSeamPointListSize != 0) {
 
-                tbb::parallel_for(auxiliaryLeafNodeRange,
-                    volume_to_mesh_internal::SeamLineWeights<InputTreeType>(
+                OPENVDB_FOR_EACH(
+					volume_to_mesh_internal::SeamLineWeights<InputTreeType>(
                         signFlagsLeafNodes, inputTree, *refPointIndexTree, *refSignFlagsTree,
-                            mQuantizedSeamPoints.get(), isovalue));
+                            mQuantizedSeamPoints.get(), isovalue),
+					auxiliaryLeafNodeRange);
             }
         }
     }
@@ -5090,19 +5105,19 @@ VolumeToMesh::operator()(const InputGridType& inputGrid)
             mergeOp.setRefSignFlagsData(*refSignFlagsTree, float(mSecAdaptivity));
         }
 
-        tbb::parallel_for(auxiliaryLeafNodeRange, mergeOp);
+        OPENVDB_FOR_EACH(mergeOp, auxiliaryLeafNodeRange);
 
         volume_to_mesh_internal::AdaptiveLeafNodePointCount<Index32LeafNodeType>
             op(pointIndexLeafNodes, signFlagsLeafNodes, leafNodeOffsets);
 
-        tbb::parallel_for(auxiliaryLeafNodeRange, op);
+		OPENVDB_FOR_EACH(op, auxiliaryLeafNodeRange);
 
     } else {
 
         volume_to_mesh_internal::LeafNodePointCount<Int16LeafNodeType::LOG2DIM>
             op(signFlagsLeafNodes, leafNodeOffsets);
 
-        tbb::parallel_for(auxiliaryLeafNodeRange, op);
+		OPENVDB_FOR_EACH(op, auxiliaryLeafNodeRange);
     }
 
 
@@ -5133,7 +5148,7 @@ VolumeToMesh::operator()(const InputGridType& inputGrid)
                 mQuantizedSeamPoints.get(), &mPointFlags.front());
         }
 
-        tbb::parallel_for(auxiliaryLeafNodeRange, op);
+        OPENVDB_FOR_EACH(op, auxiliaryLeafNodeRange);
     }
 
 
@@ -5154,7 +5169,7 @@ VolumeToMesh::operator()(const InputGridType& inputGrid)
             op.setRefSignTree(refSignFlagsTree);
         }
 
-        tbb::parallel_for(auxiliaryLeafNodeRange, op);
+        OPENVDB_FOR_EACH(op, auxiliaryLeafNodeRange);
 
     } else {
 
@@ -5168,7 +5183,7 @@ VolumeToMesh::operator()(const InputGridType& inputGrid)
             op.setRefSignTree(refSignFlagsTree);
         }
 
-        tbb::parallel_for(auxiliaryLeafNodeRange, op);
+        OPENVDB_FOR_EACH(op, auxiliaryLeafNodeRange);
     }
 
 
@@ -5219,7 +5234,7 @@ doVolumeToMesh(
 
     { // Copy points
         volume_to_mesh_internal::PointListCopy ptnCpy(mesher.pointList(), points);
-        tbb::parallel_for(BlockedRange<size_t>(0, points.size()), ptnCpy);
+        OPENVDB_FOR_EACH(ptnCpy, BlockedRange<size_t>(0, points.size()));
         mesher.pointList().reset(nullptr);
     }
 

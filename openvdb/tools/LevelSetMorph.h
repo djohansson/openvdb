@@ -214,7 +214,9 @@ private:
         /// Shallow copy constructor called by tbb::parallel_for() threads
         Morph(const Morph& other);
         /// Shallow copy constructor called by tbb::parallel_reduce() threads
+#ifdef OPENVDB_USE_TBB
         Morph(Morph& other, tbb::split);
+#endif
         /// destructor
         virtual ~Morph() {}
         /// Advect the level set from its current time, time0, to its final time, time1.
@@ -372,6 +374,7 @@ Morph(const Morph& other)
 {
 }
 
+#ifdef OPENVDB_USE_TBB
 template<typename GridT, typename InterruptT>
 template <typename MapT, math::BiasedGradientScheme SpatialScheme,
           math::TemporalIntegrationScheme TemporalScheme>
@@ -386,6 +389,7 @@ Morph(Morph& other, tbb::split)
     , mTask(other.mTask)
 {
 }
+#endif
 
 template<typename GridT, typename InterruptT>
 template <typename MapT, math::BiasedGradientScheme SpatialScheme,

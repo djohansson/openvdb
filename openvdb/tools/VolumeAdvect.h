@@ -319,8 +319,11 @@ private:
     }
     bool interrupt() const
     {
-        if (mInterrupter && util::wasInterrupted(mInterrupter)) {
+        if (mInterrupter && util::wasInterrupted(mInterrupter))
+		{
+#ifdef OPENVDB_USE_TBB
             tbb::task::self().cancel_group_execution();
+#endif
             return true;
         }
         return false;

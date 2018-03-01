@@ -593,7 +593,7 @@ inline void collapseAttribute(  PointDataTree& tree,
 
     LeafManagerT leafManager(tree);
 	OPENVDB_FOR_EACH(
-		CollapseAttributeOp<ValueType, PointDataTree>(index, uniformValue),
+		(CollapseAttributeOp<ValueType, PointDataTree>(index, uniformValue)),
 		leafManager.leafRange());
 }
 
@@ -759,7 +759,7 @@ inline void compactAttributes(PointDataTree& tree)
     if (!iter)  return;
 
 	OPENVDB_FOR_EACH(
-		CompactAttributesOp<PointDataTree>(),
+		(CompactAttributesOp<PointDataTree>()),
 		LeafManagerT(tree).leafRange());
 }
 

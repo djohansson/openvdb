@@ -217,7 +217,7 @@ void
 LeafOp<Index32LeafT>::run(bool threaded)
 {
     if (threaded) {
-        tbb::parallel_for(BlockedRange<size_t>(0, mLeafNodes.size()), *this);
+        OPENVDB_FOR_EACH(*this, BlockedRange<size_t>(0, mLeafNodes.size()));
     } else {
         (*this)(BlockedRange<size_t>(0, mLeafNodes.size()));
     }
@@ -290,7 +290,7 @@ inline void
 NodeOp::run(bool threaded)
 {
     if (threaded) {
-        tbb::parallel_for(BlockedRange<size_t>(0, mLeafRanges.size()), *this);
+        OPENVDB_FOR_EACH(*this, BlockedRange<size_t>(0, mLeafRanges.size()));
     } else {
         (*this)(BlockedRange<size_t>(0, mLeafRanges.size()));
     }
@@ -419,7 +419,7 @@ void
 ClosestPointDist<Index32LeafT>::run(bool threaded)
 {
     if (threaded) {
-        tbb::parallel_for(BlockedRange<size_t>(0, mInstancePoints.size()), *this);
+        OPENVDB_FOR_EACH(*this, BlockedRange<size_t>(0, mInstancePoints.size()));
     } else {
         (*this)(BlockedRange<size_t>(0, mInstancePoints.size()));
     }
@@ -549,6 +549,7 @@ public:
     inline void run(bool threaded = true);
 
 
+#ifdef OPENVDB_USE_TBB
     UpdatePoints(UpdatePoints&, tbb::split);
     inline void operator()(const BlockedRange<size_t>& range);
     void join(const UpdatePoints& rhs)
@@ -558,6 +559,7 @@ public:
             mIndex = rhs.mIndex;
         }
     }
+#endif
 
 private:
     const Vec4s& mSphere;
@@ -586,6 +588,7 @@ UpdatePoints::UpdatePoints(
 {
 }
 
+#ifdef OPENVDB_USE_TBB
 inline
 UpdatePoints::UpdatePoints(UpdatePoints& rhs, tbb::split)
     : mSphere(rhs.mSphere)
@@ -597,6 +600,7 @@ UpdatePoints::UpdatePoints(UpdatePoints& rhs, tbb::split)
     , mIndex(rhs.mIndex)
 {
 }
+#endif
 
 inline void
 UpdatePoints::run(bool threaded)
@@ -837,9 +841,10 @@ ClosestSurfacePoint<GridT>::initialize(
 
         std::unique_ptr<Index32[]> leafNodeOffsets(new Index32[signFlagsLeafNodes.size()]);
 
-        tbb::parallel_for(auxiliaryLeafNodeRange,
-            volume_to_mesh_internal::LeafNodePointCount<Int16LeafNodeType::LOG2DIM>
-                (signFlagsLeafNodes, leafNodeOffsets));
+        OPENVDB_FOR_EACH(
+			volume_to_mesh_internal::LeafNodePointCount<Int16LeafNodeType::LOG2DIM>
+                (signFlagsLeafNodes, leafNodeOffsets),
+			auxiliaryLeafNodeRange);
 
         {
             Index32 pointCount = 0;
@@ -857,9 +862,11 @@ ClosestSurfacePoint<GridT>::initialize(
         std::vector<Index32LeafNodeType*> pointIndexLeafNodes;
         mIdxTreePt->getNodes(pointIndexLeafNodes);
 
-        tbb::parallel_for(auxiliaryLeafNodeRange, volume_to_mesh_internal::ComputePoints<TreeT>(
-            mSurfacePointList.get(), tree, pointIndexLeafNodes,
-            signFlagsLeafNodes, leafNodeOffsets, transform, ValueT(isovalue)));
+        OPENVDB_FOR_EACH(
+			volume_to_mesh_internal::ComputePoints<TreeT>(
+				mSurfacePointList.get(), tree, pointIndexLeafNodes,
+				signFlagsLeafNodes, leafNodeOffsets, transform, ValueT(isovalue)),
+			auxiliaryLeafNodeRange);
     }
 
     if (interrupter && interrupter->wasInterrupted()) return false;
