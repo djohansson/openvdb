@@ -1081,7 +1081,7 @@ TestAttributeArray::testStrided()
         CPPUNIT_ASSERT_EQUAL(Index(3), handle.stride());
         CPPUNIT_ASSERT_EQUAL(Index(2), handle.size());
 
-        size_t arrayMem = 64;
+        static const size_t arrayMem = sizeof(AttributeArrayI);
 
         CPPUNIT_ASSERT_EQUAL(sizeof(int) * /*size*/3 * /*stride*/2 + arrayMem, array->memUsage());
     }

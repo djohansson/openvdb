@@ -2272,7 +2272,7 @@ sdfToFogVolume(GridType& grid, typename GridType::ValueType cutoffDistance)
     newTree->getNodes(internalNodes);
 
 	OPENVDB_FOR_EACH(
-		(level_set_util_internal::SDFTilesToFogVolume<TreeType, InternalNodeType>(tree, &internalNodes[0])),
+		(level_set_util_internal::SDFTilesToFogVolume<TreeType, InternalNodeType>(tree, internalNodes.data())),
 		BlockedRange<size_t>(0, internalNodes.size()));
 
     {
