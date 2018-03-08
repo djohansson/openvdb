@@ -279,7 +279,6 @@ TestAttributeArray::testFixedPointConversion()
 namespace {
 
 static AttributeArray::Ptr factory1(Index, Index, bool) { return AttributeArray::Ptr(); }
-static AttributeArray::Ptr factory2(Index, Index, bool) { return AttributeArray::Ptr(); }
 
 } // namespace
 
@@ -298,10 +297,11 @@ TestAttributeArray::testRegistry()
     // manually register the type and factory
 
     AttributeArray::registerType(AttributeF::attributeType(), factory1);
-
+	
     { // cannot re-register an already registered AttributeArray
         CPPUNIT_ASSERT(AttributeArray::isRegistered(AttributeF::attributeType()));
-        CPPUNIT_ASSERT_THROW(AttributeArray::registerType(AttributeF::attributeType(), factory2), KeyError);
+		auto factory2 = [](Index, Index, bool) { return AttributeArray::Ptr(); };
+		CPPUNIT_ASSERT_THROW(AttributeArray::registerType(AttributeF::attributeType(), factory2), KeyError);
     }
 
     { // un-registering
