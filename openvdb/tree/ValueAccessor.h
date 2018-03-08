@@ -205,8 +205,7 @@ protected:
 template<typename _TreeType,
          bool IsSafe = true,
          Index CacheLevels = _TreeType::DEPTH-1,
-         typename MutexType = std::mutex,
-		 typename LockT = std::lock_guard<MutexType>>
+         typename MutexType = NullMutex>
 class ValueAccessor: public ValueAccessorBase<_TreeType, IsSafe>
 {
 public:
@@ -217,6 +216,7 @@ public:
     using LeafNodeT = typename TreeType::LeafNodeType;
     using ValueType = typename RootNodeT::ValueType;
     using BaseT = ValueAccessorBase<TreeType, IsSafe>;
+	using LockT = std::lock_guard<MutexType>;
     using BaseT::IsConstTree;
 
     ValueAccessor(TreeType& tree): BaseT(tree), mCache(*this)
@@ -471,18 +471,11 @@ private:
 }; // class ValueAccessor
 
 
-struct null_mutex
-{
-	void lock() {}
-	void unlock() noexcept {}
-	bool try_lock() { return true; }
-};
-
 /// @brief Template specialization of the ValueAccessor with no mutex and no cache levels
 /// @details This specialization is provided mainly for benchmarking.
 /// Accessors with caching will almost always be faster.
 template<typename TreeType, bool IsSafe>
-class ValueAccessor<TreeType, IsSafe, 0, null_mutex>
+class ValueAccessor<TreeType, IsSafe, 0, NullMutex>
     : public ValueAccessor0<TreeType, IsSafe>
 {
 public:
@@ -494,7 +487,7 @@ public:
 
 /// Template specialization of the ValueAccessor with no mutex and one cache level
 template<typename TreeType, bool IsSafe>
-class ValueAccessor<TreeType, IsSafe, 1, null_mutex>
+class ValueAccessor<TreeType, IsSafe, 1, NullMutex>
     : public ValueAccessor1<TreeType, IsSafe>
 {
 public:
@@ -506,7 +499,7 @@ public:
 
 /// Template specialization of the ValueAccessor with no mutex and two cache levels
 template<typename TreeType, bool IsSafe>
-class ValueAccessor<TreeType, IsSafe, 2, null_mutex>
+class ValueAccessor<TreeType, IsSafe, 2, NullMutex>
     : public ValueAccessor2<TreeType, IsSafe>
 {
 public:
@@ -518,7 +511,7 @@ public:
 
 /// Template specialization of the ValueAccessor with no mutex and three cache levels
 template<typename TreeType, bool IsSafe>
-class ValueAccessor<TreeType, IsSafe, 3, null_mutex>: public ValueAccessor3<TreeType, IsSafe>
+class ValueAccessor<TreeType, IsSafe, 3, NullMutex>: public ValueAccessor3<TreeType, IsSafe>
 {
 public:
     ValueAccessor(TreeType& tree): ValueAccessor3<TreeType, IsSafe>(tree) {}
