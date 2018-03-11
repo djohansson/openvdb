@@ -250,18 +250,19 @@ using ShortestFittingIntT = typename ShortestFittingInt<NBits>::Type;
 ////////////////////////////////////////
 
 
-#ifdef OPENVDB_USE_TBB
-template <typename T>
-using EnumerableThreadSpecific = typename tbb::enumerable_thread_specific<T>;
-template <typename T>
-using Combinable = typename tbb::combinable<T>;
-#else
 struct NullMutex
 {
 	void lock() {}
 	void unlock() noexcept {}
 	bool try_lock() { return true; }
 };
+
+#ifdef OPENVDB_USE_TBB
+template <typename T>
+using EnumerableThreadSpecific = typename tbb::enumerable_thread_specific<T>;
+template <typename T>
+using Combinable = typename tbb::combinable<T>;
+#else
 template <typename T>
 class Combinable
 {

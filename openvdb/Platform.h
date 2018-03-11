@@ -164,9 +164,9 @@
 #define OPENVDB_REDUCE(func, range) \
 	(tbb::parallel_reduce((range), (func)))
 #define OPENVDB_REDUCE_SEED(func, range, seed) \
-	(tbb::parallel_reduce((range), (func), (seed)))
+	(tbb::parallel_reduce((range), (seed), (func)))
 #define OPENVDB_REDUCE_SEED_JOIN(func, range, seed, join) \
-	(tbb::parallel_reduce((range), (func), (seed), (join)))
+	(tbb::parallel_reduce((range), (seed), (func), (join)))
 #define OPENVDB_SORT(begin, end) \
 	(tbb::parallel_sort((begin), (end)))
 #define OPENVDB_SORT_COMPARE(begin, end, compare) \

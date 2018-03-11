@@ -376,7 +376,7 @@ Queue::writeGridVec(const GridCPtrVec& grids, const Archive& archive, const Meta
     const Queue::Id taskId = mImpl->mNextId++;
     // From the "GUI Thread" chapter in the TBB Design Patterns guide
 #ifdef OPENVDB_USE_TBB
-	OutputTask* taskMem = tbb::task::allocate_root();
+	auto taskMem = tbb::task::allocate_root();
 #else
 	char taskMem[sizeof(OutputTask)]; // we will call execute directly in enqueue, so fine to allocate on stack
 #endif

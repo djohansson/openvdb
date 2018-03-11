@@ -217,7 +217,7 @@ struct PointsToMask<GridT, InterrupterT>::AddPoints
         , mParent(&parent)
         , mPool(&pool)
     {
-        OPENVDB_FOR_EACH(std::make_tuple(0, mPoints->size(), grainSize), *this);
+        OPENVDB_FOR_EACH(*this, BlockedRange<size_t>(0, mPoints->size(), grainSize));
     }
     void operator()(const BlockedRange<size_t>& range) const
     {

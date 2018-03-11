@@ -1154,7 +1154,7 @@ fillArray(ValueType* array, const ValueType val, const size_t length)
 {
 	const int threadCount =
 #ifdef OPENVDB_USE_TBB
-		tbb::task_scheduler_init::default_num_threads()
+		tbb::task_scheduler_init::default_num_threads();
 #else
 		1;
 #endif

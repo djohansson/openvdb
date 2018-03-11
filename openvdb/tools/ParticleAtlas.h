@@ -280,7 +280,7 @@ struct ComputeExtremas
     {
     }
 
-#ifdef OPENVDN_USE_TBB
+#ifdef OPENVDB_USE_TBB
     ComputeExtremas(ComputeExtremas& rhs, tbb::split)
         : particleArray(rhs.particleArray)
         , minRadius(std::numeric_limits<ScalarType>::max())
