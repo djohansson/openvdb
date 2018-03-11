@@ -58,8 +58,6 @@
 
 #ifdef _MSC_VER
 #include <boost/interprocess/detail/os_file_functions.hpp> // open_existing_file(), close_file()
-extern "C" __declspec(dllimport) bool __stdcall GetFileTime(
-    void* fh, void* ctime, void* atime, void* mtime);
 // boost::interprocess::detail was renamed to boost::interprocess::ipcdetail in Boost 1.48.
 // Ensure that both namespaces exist.
 namespace boost { namespace interprocess { namespace detail {} namespace ipcdetail {} } }
@@ -430,7 +428,7 @@ public:
 
         if (void* fh = open_existing_file(filename, boost::interprocess::read_only)) {
             struct { unsigned long lo, hi; } mtime; // Windows FILETIME struct
-            if (GetFileTime(fh, nullptr, nullptr, &mtime)) {
+            if (GetFileTime(fh, nullptr, nullptr, (LPFILETIME)&mtime)) {
                 result = (Index64(mtime.hi) << 32) | mtime.lo;
             }
             close_file(fh);
