@@ -571,6 +571,8 @@ TestStreamCompression::testPagedStreams()
             CPPUNIT_ASSERT_EQUAL(fileout.tellp(), std::streampos(values.size()+sizeof(int)*pages));
 #endif
 
+			fileout.close();
+
             // abuse File being a friend of MappedFile to get around the private constructor
             ProxyMappedFile* proxy = new ProxyMappedFile(filename);
             SharedPtr<io::MappedFile> mappedFile(reinterpret_cast<io::MappedFile*>(proxy));
