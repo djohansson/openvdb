@@ -35,11 +35,14 @@
 /// @note This is intended mainly as an example of how to ray-trace
 /// OpenVDB volumes.  It is not a production-quality renderer.
 
+#include <algorithm>
 #include <chrono>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <memory>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 #include <boost/algorithm/string/classification.hpp>
@@ -56,9 +59,6 @@
 #include <openvdb/openvdb.h>
 #include <openvdb/tools/RayIntersector.h>
 #include <openvdb/tools/RayTracer.h>
-#ifdef DWA_OPENVDB
-#include <usagetrack.h>
-#endif
 
 
 namespace {
@@ -489,10 +489,6 @@ struct OptParse
 int
 main(int argc, char *argv[])
 {
-#ifdef DWA_OPENVDB
-    USAGETRACK_report_basic_tool_usage(argc, argv, /*duration=*/0);
-#endif
-
     OPENVDB_START_THREADSAFE_STATIC_WRITE
     gProgName = argv[0];
     if (const char* ptr = ::strrchr(gProgName, '/')) gProgName = ptr + 1;
@@ -724,7 +720,6 @@ main(int argc, char *argv[])
         retcode = EXIT_FAILURE;
     } catch (...) {
         OPENVDB_LOG_FATAL("Exception caught (unexpected type)");
-        std::unexpected();
     }
 
     return retcode;

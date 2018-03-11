@@ -213,7 +213,7 @@ struct SetGroupOp
 
     //////////
 
-    const GroupIndex        mIndex;
+    const GroupIndex&       mIndex;
 }; // struct SetGroupOp
 
 
@@ -273,7 +273,7 @@ struct SetGroupFromIndexOp
 
     const PointIndexTree& mIndexTree;
     const MembershipArray& mMembership;
-    const GroupIndex mIndex;
+    const GroupIndex& mIndex;
 }; // struct SetGroupFromIndexOp
 
 
@@ -311,8 +311,8 @@ struct SetGroupByFilterOp
 
     //////////
 
-    const GroupIndex mIndex;
-    const FilterT mFilter;
+    const GroupIndex& mIndex;
+    const FilterT& mFilter; // beginIndex takes a copy of mFilter
 }; // struct SetGroupByFilterOp
 
 
@@ -454,6 +454,7 @@ template <typename PointDataTree>
 inline void appendGroup(PointDataTree& tree, const Name& group)
 {
     using Descriptor = AttributeSet::Descriptor;
+    using LeafManagerT = typename tree::template LeafManager<PointDataTree>;
 
     using point_attribute_internal::AppendAttributeOp;
     using point_group_internal::GroupInfo;
@@ -474,9 +475,11 @@ inline void appendGroup(PointDataTree& tree, const Name& group)
 
     if (descriptor->hasGroup(group))    return;
 
+    const bool hasUnusedGroup = groupInfo.unusedGroups() > 0;
+
     // add a new group attribute if there are no unused groups
 
-    if (groupInfo.unusedGroups() == 0) {
+    if (!hasUnusedGroup) {
 
         // find a new internal group name
 
@@ -489,7 +492,8 @@ inline void appendGroup(PointDataTree& tree, const Name& group)
         // insert new group attribute
 
         AppendAttributeOp<PointDataTree> append(descriptor, pos);
-		OPENVDB_FOR_EACH(append, typename tree::template LeafManager<PointDataTree>(tree).leafRange());
+        LeafManagerT leafManager(tree);
+		OPENVDB_FOR_EACH(append, leafManager.leafRange());
     }
     else {
         // make the descriptor unique before we modify the group map
@@ -509,6 +513,12 @@ inline void appendGroup(PointDataTree& tree, const Name& group)
     // add the group mapping to the descriptor
 
     descriptor->setGroup(group, offset);
+
+    // if there was an unused group then we did not need to append a new attribute, so
+    // we must manually clear membership in the new group as its bits may have been
+    // previously set
+
+    if (hasUnusedGroup)    setGroup(tree, group, false);
 }
 
 
@@ -620,6 +630,7 @@ inline void compactGroups(PointDataTree& tree)
 {
     using Descriptor = AttributeSet::Descriptor;
     using GroupIndex = Descriptor::GroupIndex;
+    using LeafManagerT = typename tree::template LeafManager<PointDataTree>;
 
     using point_group_internal::CopyGroupOp;
     using point_group_internal::GroupInfo;
@@ -653,7 +664,8 @@ inline void compactGroups(PointDataTree& tree)
         const GroupIndex targetIndex = attributeSet.groupIndex(targetOffset);
 
         CopyGroupOp<PointDataTree> copy(targetIndex, sourceIndex);
-		OPENVDB_FOR_EACH(copy, typename tree::template LeafManager<PointDataTree>(tree).leafRange());
+        LeafManagerT leafManager(tree);
+		OPENVDB_FOR_EACH(copy, leafManager.leafRange());
 
         descriptor->setGroup(sourceName, targetOffset);
     }
@@ -703,18 +715,19 @@ inline void setGroup(   PointDataTree& tree,
     }
 
     const Descriptor::GroupIndex index = attributeSet.groupIndex(group);
+    LeafManagerT leafManager(tree);
 
     // set membership
 
     if (remove) {
         SetGroupFromIndexOp<PointDataTree,
                             PointIndexTree, false> set(indexTree, membership, index);
-		OPENVDB_FOR_EACH(set, LeafManagerT(tree).leafRange());
+		OPENVDB_FOR_EACH(set, leafManager.leafRange());
     }
     else {
         SetGroupFromIndexOp<PointDataTree,
                             PointIndexTree, true> set(indexTree, membership, index);
-		OPENVDB_FOR_EACH(set, LeafManagerT(tree).leafRange());
+		OPENVDB_FOR_EACH(set, leafManager.leafRange());
     }
 }
 
@@ -744,13 +757,14 @@ inline void setGroup(   PointDataTree& tree,
     }
 
     const Descriptor::GroupIndex index = attributeSet.groupIndex(group);
+    LeafManagerT leafManager(tree);
 
     // set membership based on member variable
 
     if (member)
-		OPENVDB_FOR_EACH((SetGroupOp<PointDataTree, true>(index)), LeafManagerT(tree).leafRange());
+		OPENVDB_FOR_EACH((SetGroupOp<PointDataTree, true>(index)), leafManager.leafRange());
     else
-		OPENVDB_FOR_EACH((SetGroupOp<PointDataTree, false>(index)), LeafManagerT(tree).leafRange());
+		OPENVDB_FOR_EACH((SetGroupOp<PointDataTree, false>(index)), leafManager.leafRange());
 }
 
 
@@ -783,7 +797,9 @@ inline void setGroupByFilter(   PointDataTree& tree,
     // set membership using filter
 
     SetGroupByFilterOp<PointDataTree, FilterT> set(index, filter);
-    OPENVDB_FOR_EACH(set, LeafManagerT(tree).leafRange());
+    LeafManagerT leafManager(tree);
+
+	OPENVDB_FOR_EACH(set, leafManager.leafRange());
 }
 
 
