@@ -24,7 +24,10 @@
 # IN NO EVENT SHALL THE COPYRIGHT HOLDERS' AND CONTRIBUTORS' AGGREGATE
 # LIABILITY FOR ALL CLAIMS REGARDLESS OF THEIR BASIS EXCEED US$250.00.
 #
+cmake_minimum_required(VERSION 3.1)
 PROJECT ( OpenVDBCore )
+
+set(CMAKE_CXX_STANDARD 11)
 
 IF (NOT WIN32)
   FIND_PACKAGE ( GLEW REQUIRED )
@@ -229,6 +232,8 @@ TARGET_LINK_LIBRARIES ( vdb_print
   openvdb_shared
   ${CMAKE_THREAD_LIBS_INIT}
   ${BLOSC_blosc_LIBRARY}
+  m
+  stdc++
   )
 
 SET ( VDB_RENDER_SOURCE_FILES cmd/openvdb_render/main.cc )
@@ -247,6 +252,8 @@ TARGET_LINK_LIBRARIES ( vdb_render
   ${Openexr_ILMIMF_LIBRARY}
   ${Ilmbase_ILMTHREAD_LIBRARY}
   ${Ilmbase_IEX_LIBRARY}
+  m
+  stdc++
   )
 
 SET ( VDB_VIEW_SOURCE_FILES
@@ -265,6 +272,8 @@ IF (NOT WIN32)
   ADD_EXECUTABLE ( vdb_view
     ${VDB_VIEW_SOURCE_FILES}
     )
+  
+  target_include_directories ( vdb_view SYSTEM PRIVATE ${Boost_INCLUDE_DIR} )
 
   TARGET_LINK_LIBRARIES ( vdb_view
     openvdb_shared
@@ -277,6 +286,8 @@ IF (NOT WIN32)
     ${GLFW_LINK_LIBRARY}
     ${GLFW_DEPENDENT_LIBRARIES}
     ${GLEW_GLEW_LIBRARY}
+    m
+    stdc++
     )
 ENDIF ()
 
@@ -384,6 +395,8 @@ IF ( OPENVDB_BUILD_UNITTESTS )
   TARGET_LINK_LIBRARIES ( vdb_test
     ${CPPUnit_cppunit_LIBRARY}
     openvdb_shared
+    m
+    stdc++
     )
 
   ADD_TEST ( vdb_unit_test vdb_test )
