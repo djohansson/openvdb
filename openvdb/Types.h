@@ -550,6 +550,15 @@ private:
 ////////////////////////////////////////
 
 
+template <typename T>
+constexpr auto sizeof_array(const T& iarray) {
+	return (sizeof(iarray) / sizeof(iarray[0]));
+}
+
+
+////////////////////////////////////////
+
+
 #ifdef OPENVDB_USE_TBB
 using SimplePartitioner = typename tbb::simple_partitioner;
 #else

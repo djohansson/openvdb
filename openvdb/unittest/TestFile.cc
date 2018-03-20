@@ -1515,7 +1515,7 @@ TestFile::testReadGridMetadata()
                 statsMetadata = grid->getStatsMetadata(),
                 otherMetadata = grid->copyMeta(); // shallow copy
             CPPUNIT_ASSERT(statsMetadata->metaCount() != 0);
-            statsMetadata->insertMeta(GridBase::META_FILE_COMPRESSION, StringMetadata(""));
+            statsMetadata->insertMeta(GridBase::getMetaString(GridBase::MetaId::FILE_COMPRESSION), StringMetadata(""));
             for (MetaMap::ConstMetaIterator it = grid->beginMeta(), end = grid->endMeta();
                 it != end; ++it)
             {

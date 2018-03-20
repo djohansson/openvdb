@@ -57,6 +57,7 @@
 #include <atomic>
 
 #ifdef _MSC_VER
+#include <windows.h>
 #include <boost/interprocess/detail/os_file_functions.hpp> // open_existing_file(), close_file()
 // boost::interprocess::detail was renamed to boost::interprocess::ipcdetail in Boost 1.48.
 // Ensure that both namespaces exist.
@@ -1078,7 +1079,7 @@ doReadGrid(GridBase::Ptr grid, const GridDescriptor& gd, std::istream& is, const
     // Add a description of the compression settings to the grid as metadata.
     /// @todo Would this be useful?
     //const uint32_t c = getDataCompression(is);
-    //grid->insertMeta(GridBase::META_FILE_COMPRESSION,
+    //grid->insertMeta(GridBase::getMetaString(GridBase::MetaId::FILE_COMPRESSION),
     //    StringMetadata(compressionToString(c)));
 
     streamMetadata->gridMetadata() = static_cast<MetaMap&>(*grid);
@@ -1295,7 +1296,7 @@ Archive::writeGrid(GridDescriptor& gd, GridBase::ConstPtr grid,
         // Compute and add grid statistics metadata.
         const auto copyOfGrid = grid->copyGrid(); // shallow copy
         ConstPtrCast<GridBase>(copyOfGrid)->addStatsMetadata();
-        ConstPtrCast<GridBase>(copyOfGrid)->insertMeta(GridBase::META_FILE_COMPRESSION,
+        ConstPtrCast<GridBase>(copyOfGrid)->insertMeta(GridBase::getMetaString(GridBase::MetaId::FILE_COMPRESSION),
             StringMetadata(compressionToString(getDataCompression(os))));
         copyOfGrid->writeMeta(os);
     }

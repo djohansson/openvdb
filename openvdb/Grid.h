@@ -284,22 +284,6 @@ public:
     /// Specify whether this grid's voxel values are in world space or in local space.
     void setIsInWorldSpace(bool);
 
-    // Standard metadata field names
-    // (These fields should normally not be accessed directly, but rather
-    // via the accessor methods above, when available.)
-    // Note: Visual C++ requires these declarations to be separate statements.
-    static const char* const META_GRID_CLASS;
-    static const char* const META_GRID_CREATOR;
-    static const char* const META_GRID_NAME;
-    static const char* const META_SAVE_HALF_FLOAT;
-    static const char* const META_IS_LOCAL_SPACE;
-    static const char* const META_VECTOR_TYPE;
-    static const char* const META_FILE_BBOX_MIN;
-    static const char* const META_FILE_BBOX_MAX;
-    static const char* const META_FILE_COMPRESSION;
-    static const char* const META_FILE_MEM_BYTES;
-    static const char* const META_FILE_VOXEL_COUNT;
-
 
     //
     // Statistics
@@ -404,6 +388,24 @@ public:
     /// Output a human-readable description of this grid.
     virtual void print(std::ostream& = std::cout, int verboseLevel = 1) const = 0;
 
+	enum MetaId
+	{
+		GRID_CLASS,
+		GRID_CREATOR,
+		GRID_NAME,
+		SAVE_HALF_FLOAT,
+		IS_LOCAL_SPACE,
+		VECTOR_TYPE,
+		FILE_BBOX_MIN,
+		FILE_BBOX_MAX,
+		FILE_COMPRESSION,
+		FILE_MEM_BYTES,
+		FILE_VOXEL_COUNT,
+
+		COUNT
+	};
+
+	static const char* getMetaString(MetaId id);
 
 protected:
     /// @brief Initialize with an identity linear transform.
@@ -428,6 +430,13 @@ protected:
 
 private:
     math::Transform::Ptr mTransform;
+
+	// Standard metadata field names
+	// (These fields should normally not be accessed directly, but rather
+	// via the accessor methods above, when available.)
+	// Note: Visual C++ requires these declarations to be separate statements.
+
+	static const char* const scMetaStrings[MetaId::COUNT];
 }; // class GridBase
 
 

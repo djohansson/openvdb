@@ -41,19 +41,20 @@ namespace OPENVDB_VERSION_NAME {
 
 /// @note For Houdini compatibility, boolean-valued metadata names
 /// should begin with "is_".
-const char
-    * const GridBase::META_GRID_CLASS = "class",
-    * const GridBase::META_GRID_CREATOR = "creator",
-    * const GridBase::META_GRID_NAME = "name",
-    * const GridBase::META_SAVE_HALF_FLOAT = "is_saved_as_half_float",
-    * const GridBase::META_IS_LOCAL_SPACE = "is_local_space",
-    * const GridBase::META_VECTOR_TYPE = "vector_type",
-    * const GridBase::META_FILE_BBOX_MIN = "file_bbox_min",
-    * const GridBase::META_FILE_BBOX_MAX = "file_bbox_max",
-    * const GridBase::META_FILE_COMPRESSION = "file_compression",
-    * const GridBase::META_FILE_MEM_BYTES = "file_mem_bytes",
-    * const GridBase::META_FILE_VOXEL_COUNT = "file_voxel_count";
-
+const char* const GridBase::scMetaStrings[GridBase::MetaId::COUNT] =
+{
+	"class",
+	"creator",
+	"name",
+	"is_saved_as_half_float",
+	"is_local_space",
+	"vector_type",
+	"file_bbox_min",
+	"file_bbox_max",
+	"file_compression",
+	"file_mem_bytes",
+	"file_voxel_count"
+};
 
 ////////////////////////////////////////
 
@@ -114,7 +115,6 @@ GridBase::isRegistered(const Name& name)
 
     return (registry->mMap.find(name) != registry->mMap.end());
 }
-
 
 void
 GridBase::registerGrid(const Name& name, GridFactory factory)
@@ -219,7 +219,7 @@ GridClass
 GridBase::getGridClass() const
 {
     GridClass cls = GRID_UNKNOWN;
-    if (StringMetadata::ConstPtr s = this->getMetadata<StringMetadata>(META_GRID_CLASS)) {
+    if (StringMetadata::ConstPtr s = this->getMetadata<StringMetadata>(getMetaString(MetaId::GRID_CLASS))) {
         cls = stringToGridClass(s->value());
     }
     return cls;
@@ -229,14 +229,14 @@ GridBase::getGridClass() const
 void
 GridBase::setGridClass(GridClass cls)
 {
-    this->insertMeta(META_GRID_CLASS, StringMetadata(gridClassToString(cls)));
+    this->insertMeta(getMetaString(MetaId::GRID_CLASS), StringMetadata(gridClassToString(cls)));
 }
 
 
 void
 GridBase::clearGridClass()
 {
-    this->removeMeta(META_GRID_CLASS);
+    this->removeMeta(getMetaString(MetaId::GRID_CLASS));
 }
 
 
@@ -323,7 +323,7 @@ VecType
 GridBase::getVectorType() const
 {
     VecType typ = VEC_INVARIANT;
-    if (StringMetadata::ConstPtr s = this->getMetadata<StringMetadata>(META_VECTOR_TYPE)) {
+    if (StringMetadata::ConstPtr s = this->getMetadata<StringMetadata>(getMetaString(MetaId::VECTOR_TYPE))) {
         typ = stringToVecType(s->value());
     }
     return typ;
@@ -333,14 +333,14 @@ GridBase::getVectorType() const
 void
 GridBase::setVectorType(VecType typ)
 {
-    this->insertMeta(META_VECTOR_TYPE, StringMetadata(vecTypeToString(typ)));
+    this->insertMeta(getMetaString(MetaId::VECTOR_TYPE), StringMetadata(vecTypeToString(typ)));
 }
 
 
 void
 GridBase::clearVectorType()
 {
-    this->removeMeta(META_VECTOR_TYPE);
+    this->removeMeta(getMetaString(MetaId::VECTOR_TYPE));
 }
 
 
@@ -350,7 +350,7 @@ GridBase::clearVectorType()
 std::string
 GridBase::getName() const
 {
-    if (Metadata::ConstPtr meta = (*this)[META_GRID_NAME]) return meta->str();
+    if (Metadata::ConstPtr meta = (*this)[getMetaString(MetaId::GRID_NAME)]) return meta->str();
     return "";
 }
 
@@ -358,8 +358,8 @@ GridBase::getName() const
 void
 GridBase::setName(const std::string& name)
 {
-    this->removeMeta(META_GRID_NAME);
-    this->insertMeta(META_GRID_NAME, StringMetadata(name));
+    this->removeMeta(getMetaString(MetaId::GRID_NAME));
+    this->insertMeta(getMetaString(MetaId::GRID_NAME), StringMetadata(name));
 }
 
 
@@ -369,7 +369,7 @@ GridBase::setName(const std::string& name)
 std::string
 GridBase::getCreator() const
 {
-    if (Metadata::ConstPtr meta = (*this)[META_GRID_CREATOR]) return meta->str();
+    if (Metadata::ConstPtr meta = (*this)[getMetaString(MetaId::GRID_CREATOR)]) return meta->str();
     return "";
 }
 
@@ -377,8 +377,8 @@ GridBase::getCreator() const
 void
 GridBase::setCreator(const std::string& creator)
 {
-    this->removeMeta(META_GRID_CREATOR);
-    this->insertMeta(META_GRID_CREATOR, StringMetadata(creator));
+    this->removeMeta(getMetaString(MetaId::GRID_CREATOR));
+    this->insertMeta(getMetaString(MetaId::GRID_CREATOR), StringMetadata(creator));
 }
 
 
@@ -388,7 +388,7 @@ GridBase::setCreator(const std::string& creator)
 bool
 GridBase::saveFloatAsHalf() const
 {
-    if (Metadata::ConstPtr meta = (*this)[META_SAVE_HALF_FLOAT]) {
+    if (Metadata::ConstPtr meta = (*this)[getMetaString(MetaId::SAVE_HALF_FLOAT)]) {
         return meta->asBool();
     }
     return false;
@@ -398,8 +398,8 @@ GridBase::saveFloatAsHalf() const
 void
 GridBase::setSaveFloatAsHalf(bool saveAsHalf)
 {
-    this->removeMeta(META_SAVE_HALF_FLOAT);
-    this->insertMeta(META_SAVE_HALF_FLOAT, BoolMetadata(saveAsHalf));
+    this->removeMeta(getMetaString(MetaId::SAVE_HALF_FLOAT));
+    this->insertMeta(getMetaString(MetaId::SAVE_HALF_FLOAT), BoolMetadata(saveAsHalf));
 }
 
 
@@ -410,7 +410,7 @@ bool
 GridBase::isInWorldSpace() const
 {
     bool local = false;
-    if (Metadata::ConstPtr meta = (*this)[META_IS_LOCAL_SPACE]) {
+    if (Metadata::ConstPtr meta = (*this)[getMetaString(MetaId::IS_LOCAL_SPACE)]) {
         local = meta->asBool();
     }
     return !local;
@@ -420,8 +420,8 @@ GridBase::isInWorldSpace() const
 void
 GridBase::setIsInWorldSpace(bool world)
 {
-    this->removeMeta(META_IS_LOCAL_SPACE);
-    this->insertMeta(META_IS_LOCAL_SPACE, BoolMetadata(!world));
+    this->removeMeta(getMetaString(MetaId::IS_LOCAL_SPACE));
+    this->insertMeta(getMetaString(MetaId::IS_LOCAL_SPACE), BoolMetadata(!world));
 }
 
 
@@ -432,14 +432,14 @@ void
 GridBase::addStatsMetadata()
 {
     const CoordBBox bbox = this->evalActiveVoxelBoundingBox();
-    this->removeMeta(META_FILE_BBOX_MIN);
-    this->removeMeta(META_FILE_BBOX_MAX);
-    this->removeMeta(META_FILE_MEM_BYTES);
-    this->removeMeta(META_FILE_VOXEL_COUNT);
-    this->insertMeta(META_FILE_BBOX_MIN,    Vec3IMetadata(bbox.min().asVec3i()));
-    this->insertMeta(META_FILE_BBOX_MAX,    Vec3IMetadata(bbox.max().asVec3i()));
-    this->insertMeta(META_FILE_MEM_BYTES,   Int64Metadata(this->memUsage()));
-    this->insertMeta(META_FILE_VOXEL_COUNT, Int64Metadata(this->activeVoxelCount()));
+    this->removeMeta(getMetaString(MetaId::FILE_BBOX_MIN));
+    this->removeMeta(getMetaString(MetaId::FILE_BBOX_MAX));
+    this->removeMeta(getMetaString(MetaId::FILE_MEM_BYTES));
+    this->removeMeta(getMetaString(MetaId::FILE_VOXEL_COUNT));
+    this->insertMeta(getMetaString(MetaId::FILE_BBOX_MIN),    Vec3IMetadata(bbox.min().asVec3i()));
+    this->insertMeta(getMetaString(MetaId::FILE_BBOX_MAX),    Vec3IMetadata(bbox.max().asVec3i()));
+    this->insertMeta(getMetaString(MetaId::FILE_MEM_BYTES),   Int64Metadata(this->memUsage()));
+    this->insertMeta(getMetaString(MetaId::FILE_VOXEL_COUNT), Int64Metadata(this->activeVoxelCount()));
 }
 
 
@@ -447,10 +447,10 @@ MetaMap::Ptr
 GridBase::getStatsMetadata() const
 {
     const char* const fields[] = {
-        META_FILE_BBOX_MIN,
-        META_FILE_BBOX_MAX,
-        META_FILE_MEM_BYTES,
-        META_FILE_VOXEL_COUNT,
+        getMetaString(MetaId::FILE_BBOX_MIN),
+        getMetaString(MetaId::FILE_BBOX_MAX),
+        getMetaString(MetaId::FILE_MEM_BYTES),
+        getMetaString(MetaId::FILE_VOXEL_COUNT),
         nullptr
     };
 
@@ -464,6 +464,12 @@ GridBase::getStatsMetadata() const
     return ret;
 }
 
+const char* GridBase::getMetaString(MetaId id)
+{
+	static_assert(sizeof_array(scMetaStrings) == MetaId::COUNT, "Make sure scMetaStrings matches MetaId");
+
+	return scMetaStrings[id];
+}
 
 ////////////////////////////////////////
 

@@ -312,33 +312,33 @@ public:
     /// @brief Return a string with the name of this MultiResGrid
     std::string getName() const
     {
-        if (Metadata::ConstPtr meta = (*this)[GridBase::META_GRID_NAME]) return meta->str();
+        if (Metadata::ConstPtr meta = (*this)[GridBase::getMetaString(GridBase::MetaId::GRID_NAME)]) return meta->str();
         return "";
     }
 
     /// @brief Set the name of this MultiResGrid
     void setName(const std::string& name)
     {
-        this->removeMeta(GridBase::META_GRID_NAME);
-        this->insertMeta(GridBase::META_GRID_NAME, StringMetadata(name));
+        this->removeMeta(GridBase::getMetaString(GridBase::MetaId::GRID_NAME));
+        this->insertMeta(GridBase::getMetaString(GridBase::MetaId::GRID_NAME), StringMetadata(name));
     }
 
     /// Return the class of volumetric data (level set, fog volume, etc.) stored in this grid.
     GridClass getGridClass() const
     {
         typename StringMetadata::ConstPtr s =
-            this->getMetadata<StringMetadata>(GridBase::META_GRID_CLASS);
+            this->getMetadata<StringMetadata>(GridBase::getMetaString(GridBase::MetaId::GRID_CLASS));
         return s ? GridBase::stringToGridClass(s->value()) : GRID_UNKNOWN;
     }
 
     /// Specify the class of volumetric data (level set, fog volume, etc.) stored in this grid.
     void setGridClass(GridClass cls)
     {
-        this->insertMeta(GridBase::META_GRID_CLASS, StringMetadata(GridBase::gridClassToString(cls)));
+        this->insertMeta(GridBase::getMetaString(GridBase::MetaId::GRID_CLASS), StringMetadata(GridBase::gridClassToString(cls)));
     }
 
     /// Remove the setting specifying the class of this grid's volumetric data.
-    void clearGridClass() { this->removeMeta(GridBase::META_GRID_CLASS); }
+    void clearGridClass() { this->removeMeta(GridBase::getMetaString(GridBase::MetaId::GRID_CLASS)); }
 
 private:
 
