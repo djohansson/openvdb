@@ -93,7 +93,7 @@ namespace point_mask_internal {
 template<typename GridT>
 struct GridCombinerOp
 {
-    using CombinableT = typename Combinable<GridT>;
+    using CombinableT = Combinable<GridT>;
     using TreeT = typename GridT::TreeType;
     using LeafT = typename TreeT::LeafNodeType;
     using ValueType = typename TreeT::ValueType;

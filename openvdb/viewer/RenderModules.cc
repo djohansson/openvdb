@@ -186,7 +186,7 @@ public:
 #ifdef OPENVDB_USE_TBB
     inline MinMaxVoxel(const MinMaxVoxel<TreeType>&, tbb::split);
 #endif
-    inline void operator()(const BlockedRange<size_t>&);
+    inline void operator()(const openvdb::BlockedRange<size_t>&);
     inline void join(const MinMaxVoxel<TreeType>&);
 
 private:
@@ -234,7 +234,7 @@ MinMaxVoxel<TreeType>::runSerial()
 
 template <class TreeType>
 inline void
-MinMaxVoxel<TreeType>::operator()(const BlockedRange<size_t>& range)
+MinMaxVoxel<TreeType>::operator()(const openvdb::BlockedRange<size_t>& range)
 {
     typename TreeType::LeafNodeType::ValueOnCIter iter;
 
@@ -1024,10 +1024,10 @@ public:
 
     void runParallel()
     {
-        OPENVDB_FOR_EACH(*this, BlockedRange<size_t>(0, (mPoints.size() / 3)));
+        OPENVDB_FOR_EACH(*this, openvdb::BlockedRange<size_t>(0, (mPoints.size() / 3)));
     }
 
-    inline void operator()(const BlockedRange<size_t>& range) const
+    inline void operator()(const openvdb::BlockedRange<size_t>& range) const
     {
         openvdb::Coord ijk;
         openvdb::Vec3d pos, normal(0.0, -1.0, 0.0);

@@ -2850,7 +2850,7 @@ RootNode<ChildT>::getNodes(ArrayT& array)
     static_assert(std::is_pointer<NodePtr>::value,
         "argument to getNodes() must be a pointer array");
     using NodeType = typename std::remove_pointer<NodePtr>::type;
-    using NonConstNodeType = typename std::remove_const<NodeType>::type;
+    //using NonConstNodeType = typename std::remove_const<NodeType>::type;
     //using result = brigand::contains<NodeChainType, NonConstNodeType>;
     //static_assert(result::value, "can't extract non-const nodes from a const tree");
     using ArrayChildT = typename std::conditional<
@@ -2880,7 +2880,7 @@ RootNode<ChildT>::getNodes(ArrayT& array) const
     using NodeType = typename std::remove_pointer<NodePtr>::type;
     static_assert(std::is_const<NodeType>::value,
         "argument to getNodes() must be an array of const node pointers");
-    using NonConstNodeType = typename std::remove_const<NodeType>::type;
+    //using NonConstNodeType = typename std::remove_const<NodeType>::type;
     //using result = brigand::contains<NodeChainType, NonConstNodeType>;
     //static_assert(result::value, "can't extract non-const nodes from a const tree");
 
@@ -2908,7 +2908,7 @@ RootNode<ChildT>::stealNodes(ArrayT& array, const ValueType& value, bool state)
     static_assert(std::is_pointer<NodePtr>::value,
         "argument to stealNodes() must be a pointer array");
     using NodeType = typename std::remove_pointer<NodePtr>::type;
-    using NonConstNodeType = typename std::remove_const<NodeType>::type;
+    //using NonConstNodeType = typename std::remove_const<NodeType>::type;
     //using result = brigand::contains<NodeChainType, NonConstNodeType>;
     //static_assert(result::value, "can't extract non-const nodes from a const tree");
     using ArrayChildT = typename std::conditional<

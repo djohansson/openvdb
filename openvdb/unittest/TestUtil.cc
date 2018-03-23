@@ -115,8 +115,6 @@ CPPUNIT_TEST_SUITE_REGISTRATION(TestUtil);
 void
 TestUtil::testCpuTimer()
 {
-	using namespace std::chrono_literals;
-
     const int expected = 259, tolerance = 20;//milliseconds
 
 	std::chrono::milliseconds sec(expected);

@@ -400,9 +400,9 @@ inline auto operator*(const Vec2<T> &v, S scalar) -> Vec2<decltype(S() * T())>
 
 /// Multiply corresponding elements of @a v0 and @a v1 and return the result.
 template <typename T0, typename T1>
-inline auto operator*(const Vec2<T0> &v0, const Vec2<T1> &v1) -> Vec2<decltype(S() * T())>
+inline auto operator*(const Vec2<T0> &v0, const Vec2<T1> &v1) -> Vec2<decltype(T0() * T1())>
 {
-	Vec2<decltype(S() * T())> result(v0[0] * v1[0], v0[1] * v1[1]);
+	Vec2<decltype(T0() * T1())> result(v0[0] * v1[0], v0[1] * v1[1]);
     return result;
 }
 

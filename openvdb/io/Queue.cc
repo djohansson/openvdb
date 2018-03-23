@@ -79,7 +79,7 @@ public:
 	~Task() TASKBASE_OVVERRIDE
 	{}
 
-	virtual TaskPtr execute() = 0;
+	virtual TaskPtr execute() TASKBASE_OVVERRIDE = 0;
 
     Queue::Id id() const { return mId; }
 
@@ -127,7 +127,7 @@ private:
     SharedPtr<Archive> mArchive;
     MetaMap mMetadata;
 };
-
+#undef TASKBASE_OVVERRIDE
 } // unnamed namespace
 
 
@@ -228,8 +228,7 @@ struct Queue::Impl
 		time_point start = hires_clock::now();
         while (!canEnqueue())
 		{
-			using namespace std::chrono_literals;
-			std::this_thread::sleep_for(0.5s);
+			std::this_thread::sleep_for(std::chrono::milliseconds(500));
             if (std::chrono::duration_cast<std::chrono::seconds>(hires_clock::now() - start).count() > double(mTimeout))
 			{
                 OPENVDB_THROW(RuntimeError,
@@ -280,8 +279,7 @@ Queue::~Queue()
     /// or blocks notifications)?
     while (mImpl->mNumTasks > 0)
 	{
-		using namespace std::chrono_literals;
-		std::this_thread::sleep_for(0.5s);
+		std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
 }
 
