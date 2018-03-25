@@ -31,8 +31,6 @@
 #include "GridDescriptor.h"
 
 #include <openvdb/Exceptions.h>
-#include <boost/algorithm/string/predicate.hpp> // for boost::ends_with()
-#include <boost/algorithm/string/erase.hpp> // for boost::erase_last()
 #include <sstream>
 
 
@@ -92,9 +90,9 @@ GridDescriptor::writeHeader(std::ostream &os) const
 void
 GridDescriptor::writeStreamPos(std::ostream &os) const
 {
-    os.write(reinterpret_cast<const char*>(&mGridPos), sizeof(boost::int64_t));
-    os.write(reinterpret_cast<const char*>(&mBlockPos), sizeof(boost::int64_t));
-    os.write(reinterpret_cast<const char*>(&mEndPos), sizeof(boost::int64_t));
+    os.write(reinterpret_cast<const char*>(&mGridPos), sizeof(int64_t));
+    os.write(reinterpret_cast<const char*>(&mBlockPos), sizeof(int64_t));
+    os.write(reinterpret_cast<const char*>(&mEndPos), sizeof(int64_t));
 }
 
 GridBase::Ptr
@@ -106,10 +104,17 @@ GridDescriptor::read(std::istream &is)
 
     // Read in the grid type.
     mGridType = readString(is);
-    if (boost::ends_with(mGridType, HALF_FLOAT_TYPENAME_SUFFIX)) {
-        mSaveFloatAsHalf = true;
-        boost::erase_last(mGridType, HALF_FLOAT_TYPENAME_SUFFIX);
-    }
+	auto endsWithEraseLast = [](std::string& str, const char* ending, bool& found)
+	{
+		auto endingSize = strlen(ending);
+		auto last = str.rfind(ending, str.size() - endingSize, endingSize);
+		if (last != std::string::npos)
+		{
+			str = str.substr(0, last);
+			found = true;
+		}
+	};
+	endsWithEraseLast(mGridType, HALF_FLOAT_TYPENAME_SUFFIX, mSaveFloatAsHalf);
 
     if (getFormatVersion(is) >= OPENVDB_FILE_VERSION_GRID_INSTANCING) {
         mInstanceParentName = readString(is);
@@ -125,9 +130,9 @@ GridDescriptor::read(std::istream &is)
     if (grid) grid->setSaveFloatAsHalf(mSaveFloatAsHalf);
 
     // Read in the offsets.
-    is.read(reinterpret_cast<char*>(&mGridPos), sizeof(boost::int64_t));
-    is.read(reinterpret_cast<char*>(&mBlockPos), sizeof(boost::int64_t));
-    is.read(reinterpret_cast<char*>(&mEndPos), sizeof(boost::int64_t));
+    is.read(reinterpret_cast<char*>(&mGridPos), sizeof(int64_t));
+    is.read(reinterpret_cast<char*>(&mBlockPos), sizeof(int64_t));
+    is.read(reinterpret_cast<char*>(&mEndPos), sizeof(int64_t));
 
     return grid;
 }

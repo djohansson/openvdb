@@ -32,7 +32,7 @@
 
 #include <openvdb/Exceptions.h>
 #include <openvdb/util/logging.h>
-#include <boost/algorithm/string/join.hpp>
+
 #include <zlib.h>
 #ifdef OPENVDB_USE_BLOSC
 #include <blosc.h>
@@ -53,7 +53,19 @@ compressionToString(uint32_t flags)
     if (flags & COMPRESS_ZIP) words.push_back("zip");
     if (flags & COMPRESS_BLOSC) words.push_back("blosc");
     if (flags & COMPRESS_ACTIVE_MASK) words.push_back("active values");
-    return boost::join(words, " + ");
+
+	auto join = [](std::vector<std::string>& strings, const std::string& separator)
+	{	
+		std::string result;
+		for (std::vector<std::string>::iterator stringIt = strings.begin(); stringIt != strings.end(); stringIt++)
+		{
+			result += *stringIt;
+			if (stringIt != strings.end() - 1)
+				result += separator;
+		}
+		return result;
+	};
+    return join(words, " + ");
 }
 
 
