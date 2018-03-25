@@ -582,13 +582,13 @@ cullVDBPoints(openvdb::points::PointDataTree& tree,
             const openvdb::FloatGrid& typedGrid =
                 static_cast<const openvdb::FloatGrid&>(*grid);
             MarkPointsOutsideIso<openvdb::FloatGrid> mark(typedGrid, idx);
-            tbb::parallel_for(leafManager.leafRange(), mark);
+            OPENVDB_FOR_EACH(mark, leafManager.leafRange());
         }
         else if (grid->isType<openvdb::DoubleGrid>()) {
             const openvdb::DoubleGrid& typedGrid =
                 static_cast<const openvdb::DoubleGrid&>(*grid);
             MarkPointsOutsideIso<openvdb::DoubleGrid> mark(typedGrid, idx);
-            tbb::parallel_for(leafManager.leafRange(), mark);
+			OPENVDB_FOR_EACH(mark, leafManager.leafRange());
         }
         openvdb::points::deleteFromGroup(tree, "dead");
     }

@@ -245,8 +245,11 @@ public:
 
     //////////
 
+#ifdef OPENVDB_USE_TBB
     VoxelShadow(VoxelShadow&, tbb::split);
-    void operator()(const tbb::blocked_range<size_t>&);
+#endif
+
+    void operator()(const openvdb::BlockedRange<size_t>&);
     void join(const VoxelShadow& rhs)
     {
         mNewTree->merge(*rhs.mNewTree);
@@ -268,6 +271,7 @@ VoxelShadow<BoolTreeT>::VoxelShadow(const BoolLeafManagerT& leafs, int zMax, int
 {
 }
 
+#ifdef OPENVDB_USE_TBB
 template<typename BoolTreeT>
 VoxelShadow<BoolTreeT>::VoxelShadow(VoxelShadow& rhs, tbb::split)
     : mNewTree(new BoolTreeT(false))
@@ -276,18 +280,19 @@ VoxelShadow<BoolTreeT>::VoxelShadow(VoxelShadow& rhs, tbb::split)
     , mZMax(rhs.mZMax)
 {
 }
+#endif
 
 template<typename BoolTreeT>
 void
 VoxelShadow<BoolTreeT>::run(bool threaded)
 {
-    if (threaded) tbb::parallel_reduce(mLeafs->getRange(), *this);
+    if (threaded) OPENVDB_REDUCE(*this, mLeafs->getRange());
     else (*this)(mLeafs->getRange());
 }
 
 template<typename BoolTreeT>
 void
-VoxelShadow<BoolTreeT>::operator()(const tbb::blocked_range<size_t>& range)
+VoxelShadow<BoolTreeT>::operator()(const openvdb::BlockedRange<size_t>& range)
 {
     typename BoolTreeT::LeafNodeType::ValueOnCIter it;
     openvdb::CoordBBox bbox;

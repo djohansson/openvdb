@@ -67,10 +67,9 @@
 #include <UT/UT_DSOVersion.h>
 #include <UT/UT_Version.h>
 
-#include <tbb/mutex.h>
-
 #include <iostream>
 #include <limits>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -104,7 +103,7 @@ RE_ShaderHandle theLineShader("basic/GL32/wire_color.prog");
 /// @note The render hook guard should not be required..
 
 // Declare this at file scope to ensure thread-safe initialization.
-tbb::mutex sRenderHookRegistryMutex;
+std::mutex sRenderHookRegistryMutex;
 bool renderHookRegistered = false;
 
 } // anonymous namespace
@@ -228,7 +227,7 @@ newRenderHook(DM_RenderTable* table)
 newRenderHook(GR_RenderTable* table)
 #endif
 {
-    tbb::mutex::scoped_lock lock(sRenderHookRegistryMutex);
+    std::lock_guard<std::mutex> lock(sRenderHookRegistryMutex);
 
     if (!renderHookRegistered) {
 
@@ -493,7 +492,7 @@ struct FillGPUBuffersPosition {
         return UT_Vector3H(positionWorldSpace.x(), positionWorldSpace.y(), positionWorldSpace.z());
     }
 
-    void operator()(const tbb::blocked_range<size_t>& range) const
+    void operator()(const openvdb::BlockedRange<size_t>& range) const
     {
         const bool useGroup = !mGroupName.empty();
 
@@ -568,7 +567,7 @@ struct FillGPUBuffersVec3 {
         , mLeafOffsets(leafOffsets)
         , mAttributeIndex(attributeIndex) { }
 
-    void operator()(const tbb::blocked_range<size_t>& range) const
+    void operator()(const openvdb::BlockedRange<size_t>& range) const
     {
         for (size_t n = range.begin(), N = range.end(); n != N; ++n) {
 
@@ -624,7 +623,7 @@ struct FillGPUBuffersId {
         , mPointDataTree(pointDataTree)
         , mAttributeIndex(attributeIndex) { }
 
-    void operator()(const tbb::blocked_range<size_t>& range) const
+    void operator()(const openvdb::BlockedRange<size_t>& range) const
     {
         const long maxId = std::numeric_limits<HoudiniBufferType>::max();
 
@@ -681,7 +680,7 @@ struct FillGPUBuffersLeafBoxes
         , mTransform(transform)
         , mPositionOffset(positionOffset) { }
 
-    void operator()(const tbb::blocked_range<size_t>& range) const
+    void operator()(const openvdb::BlockedRange<size_t>& range) const
     {
         std::vector<UT_Vector3H> corners;
         corners.reserve(8);
@@ -1026,8 +1025,8 @@ GR_PrimVDBPoints::updateWireBuffer(RE_Render *r,
         }
 
         FillGPUBuffersLeafBoxes fill(data.get(), coords, grid.transform(), mCentroid);
-        const tbb::blocked_range<size_t> range(0, coords.size());
-        tbb::parallel_for(range, fill);
+        const openvdb::BlockedRange<size_t> range(0, coords.size());
+        OPENVDB_FOR_EACH(fill, range);
 
         const int maxVertexSize = RE_OGLBuffer::getMaxVertexArraySize(r);
         for (int offset = 0; offset < numPoints; offset += maxVertexSize) {

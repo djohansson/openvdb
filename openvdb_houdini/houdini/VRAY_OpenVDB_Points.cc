@@ -109,11 +109,13 @@ struct GenerateBBoxOp {
         , mIncludeGroups(includeGroups)
         , mExcludeGroups(excludeGroups) { }
 
+#ifdef OPENVDB_USE_TBB
     GenerateBBoxOp(const GenerateBBoxOp& parent, tbb::split)
         : mTransform(parent.mTransform)
         , mBbox(parent.mBbox)
         , mIncludeGroups(parent.mIncludeGroups)
         , mExcludeGroups(parent.mExcludeGroups) { }
+#endif
 
     void operator()(const LeafRangeT& range) {
 
@@ -329,7 +331,7 @@ getBoundingBox( const std::vector<typename PointDataGridT::Ptr>& gridPtrs,
 
         // size and combine the boxes for each leaf in the tree via a reduction
         GenerateBBoxOp<PointDataTree> generateBbox(grid->transform(), includeGroups, excludeGroups);
-        tbb::parallel_reduce(leafManager.leafRange(), generateBbox);
+        OPENVDB_REDUCE(generateBbox, leafManager.leafRange());
 
         if (generateBbox.mBbox.empty())     continue;
 
@@ -598,7 +600,7 @@ VRAY_OpenVDB_Points::render()
 
                 PopulateColorFromVelocityOp<PointDataTree> populateColor(colorIndex, velocityIndex,
                     mFunctionRamp, mMaxSpeed, mIncludeGroups, mExcludeGroups);
-                tbb::parallel_for(leafManager.leafRange(), populateColor);
+                OPENVDB_FOR_EACH(populateColor, leafManager.leafRange());
             }
         }
     }

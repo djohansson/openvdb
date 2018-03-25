@@ -49,11 +49,12 @@
 #include <SOP/SOP_Cache.h> // for stealable
 #include <UT/UT_InfoTree.h>
 #include <UT/UT_SharedPtr.h>
-#include <tbb/mutex.h>
+
 #include <algorithm>
 #include <iostream>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <sstream>
 #include <stdexcept>
 
@@ -62,8 +63,8 @@ namespace openvdb_houdini {
 
 namespace node_info_text {
 
-using Mutex = tbb::mutex;
-using Lock = Mutex::scoped_lock;
+using Mutex = std::mutex;
+using Lock = std::lock_guard<Mutex>;
 // map of function callbacks to grid types
 using ApplyGridSpecificInfoTextMap = std::map<openvdb::Name, ApplyGridSpecificInfoText>;
 

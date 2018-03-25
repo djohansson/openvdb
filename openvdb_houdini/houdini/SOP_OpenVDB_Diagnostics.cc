@@ -52,7 +52,6 @@
   namespace boostmpl = hboost::mpl;
 #else
   #include <openvdb/external/brigand.hpp>
-  namespace boostmpl = brigand;
 #endif
 
 #include <memory>
@@ -240,7 +239,11 @@ struct Visitor
     using LeafNodeType = typename TreeType::LeafNodeType;
     using RootNodeType = typename TreeType::RootNodeType;
     using NodeChainType = typename RootNodeType::NodeChainType;
-    using InternalNodeType = typename boostmpl::at<NodeChainType, boostmpl::int_<1>>::type;
+#ifdef SESI_OPENVDB
+	using InternalNodeType = typename boostmpl::at<NodeChainType, boostmpl::int_<1>>::type;
+#else
+    using InternalNodeType = brigand::at<NodeChainType, std::integral_constant<int, 1>>;
+#endif
 
     using BoolTreeType = typename TreeType::template ValueConverter<bool>::Type;
     using BoolTreePtr = typename BoolTreeType::Ptr;
@@ -284,13 +287,13 @@ struct Visitor
 
         if (kind == TILES_AND_VOXELS || kind == VOXELS) {
             LeafNodeReduction<TestType> op(state, &mLeafNodes[0], test, *mValueMask);
-            tbb::parallel_reduce(tbb::blocked_range<size_t>(0, mLeafNodes.size()), op);
+            OPENVDB_REDUCE(op, openvdb::BlockedRange<size_t>(0, mLeafNodes.size()));
         }
 
         if (kind == TILES_AND_VOXELS || kind == TILES) {
 
             InternalNodeReduction<TestType> op(state, &mInternalNodes[0], test, *mValueMask);
-            tbb::parallel_reduce(tbb::blocked_range<size_t>(0, mInternalNodes.size()), op);
+			OPENVDB_REDUCE(op, openvdb::BlockedRange<size_t>(0, mInternalNodes.size()));
 
             TestType myTest(test);
 
@@ -335,14 +338,16 @@ private:
               mMask(mPrimMask ? mPrimMask : &mTempMask), mTest(test)
         {}
 
+#ifdef OPENVDB_USE_TBB
         LeafNodeReduction(LeafNodeReduction& other, tbb::split)
             : mState(other.mState), mNodes(other.mNodes), mPrimMask(other.mPrimMask),
               mTempMask(false), mMask(&mTempMask), mTest(other.mTest)
         {}
+#endif
 
         void join(LeafNodeReduction& other) { mMask->merge(*other.mMask); }
 
-        void operator()(const tbb::blocked_range<size_t>& range) {
+        void operator()(const openvdb::BlockedRange<size_t>& range) {
 
             openvdb::tree::ValueAccessor<BoolTreeType> mask(*mMask);
 
@@ -392,14 +397,16 @@ private:
               mMask(mPrimMask ? mPrimMask : &mTempMask), mTest(test)
         {}
 
+#ifdef OPENVDB_USE_TBB
         InternalNodeReduction(InternalNodeReduction& other, tbb::split)
             : mState(other.mState), mNodes(other.mNodes), mPrimMask(other.mPrimMask),
               mTempMask(false), mMask(&mTempMask), mTest(other.mTest)
         {}
+#endif
 
         void join(InternalNodeReduction& other) { mMask->merge(*other.mMask); }
 
-        void operator()(const tbb::blocked_range<size_t>& range) {
+        void operator()(const openvdb::BlockedRange<size_t>& range) {
 
             openvdb::Coord ijk;
             const int dim = int(InternalNodeType::ChildNodeType::DIM) - 1;
@@ -473,7 +480,7 @@ struct GetPoints
     {
     }
 
-    void operator()(const tbb::blocked_range<size_t>& range) const {
+    void operator()(const openvdb::BlockedRange<size_t>& range) const {
 
         openvdb::Vec3d xyz;
 
@@ -524,8 +531,8 @@ getPoints(const openvdb::math::Transform& xform, const BoolTreeType& mask,
         totalCount += voxelCount;
         points.reset(new UT_Vector3[totalCount]);
 
-        tbb::parallel_for(tbb::blocked_range<size_t>(0, nodes.size()),
-            GetPoints<BoolLeafNodeType>(&nodes[0], points.get(), offsetTable.get(), xform));
+        OPENVDB_FOR_EACH(GetPoints<BoolLeafNodeType>(&nodes[0], points.get(), offsetTable.get(), xform),
+			openvdb::BlockedRange<size_t>(0, nodes.size()));
     }
 
     if (tileCount > 0) {
@@ -584,7 +591,7 @@ struct GetValues
     {
     }
 
-    void operator()(const tbb::blocked_range<size_t>& range) const {
+    void operator()(const openvdb::BlockedRange<size_t>& range) const {
 
         openvdb::tree::ValueAccessor<const TreeType> acc(*mTree);
 
@@ -635,8 +642,8 @@ getValues(const TreeType& tree,
         totalCount += voxelCount;
         values.reset(new ValueType[totalCount]);
 
-        tbb::parallel_for(tbb::blocked_range<size_t>(0, nodes.size()),
-            GetValues<TreeType>(tree, &nodes[0], values.get(), offsetTable.get()));
+        OPENVDB_FOR_EACH(GetValues<TreeType>(tree, &nodes[0], values.get(), offsetTable.get()),
+			openvdb::BlockedRange<size_t>(0, nodes.size()));
     }
 
     if (tileCount > 0) {
@@ -862,7 +869,7 @@ struct FixVoxelValues
     {
     }
 
-    void operator()(const tbb::blocked_range<size_t>& range) const {
+    void operator()(const openvdb::BlockedRange<size_t>& range) const {
 
         using ValueOnCIter = typename BoolLeafNodeType::ValueOnCIter;
         openvdb::tree::ValueAccessor<TreeType> acc(*mTree);
@@ -925,8 +932,8 @@ fixValues(const GridType& grid, std::vector<MaskData<GridType> > fixMasks,
             std::vector<const BoolLeafNodeType*> nodes;
             mask.getNodes(nodes);
 
-            tbb::parallel_for(tbb::blocked_range<size_t>(0, nodes.size()),
-                FixVoxelValues<GridType>(replacementGrid->tree(), &nodes[0], fix));
+            OPENVDB_FOR_EACH(FixVoxelValues<GridType>(replacementGrid->tree(), &nodes[0], fix),
+				openvdb::BlockedRange<size_t>(0, nodes.size()));
         }
 
         // fix tiles

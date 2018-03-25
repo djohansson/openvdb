@@ -50,9 +50,6 @@
 #include <GA/GA_Handle.h>
 #include <GA/GA_PageIterator.h>
 
-#include <tbb/blocked_range.h>
-#include <tbb/parallel_for.h>
-
 #include <sstream>
 #include <string>
 #include <vector>
@@ -412,7 +409,7 @@ struct PressureProjectionOp
     {
     }
 
-    void operator()(const tbb::blocked_range<size_t>& range) const
+    void operator()(const openvdb::BlockedRange<size_t>& range) const
     {
         using ElementType = typename ValueType::value_type;
 
@@ -756,8 +753,8 @@ removeDivergenceWithColliderGrid(SolverParms& parms, const BoundaryOpType& bound
         gradNodes.reserve(velNodes.size());
         gradientOfPressure->tree().getNodes(gradNodes);
 
-        tbb::parallel_for(tbb::blocked_range<size_t>(0, velNodes.size()),
-            PressureProjectionOp<VectorTreeType>(parms, &velNodes[0], &gradNodes[0], staggered));
+        OPENVDB_FOR_EACH(PressureProjectionOp<VectorTreeType>(parms, &velNodes[0], &gradNodes[0], staggered),
+			openvdb::BlockedRange<size_t>(0, velNodes.size()));
     }
 
     if (parms.colliderType != CT_NONE) {

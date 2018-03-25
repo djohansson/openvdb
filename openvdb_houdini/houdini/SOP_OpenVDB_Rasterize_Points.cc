@@ -74,12 +74,9 @@
 #include <VOP/VOP_ExportedParmsManager.h>
 #include <VOP/VOP_LanguageContextTypeList.h>
 
-#include <tbb/atomic.h>
-#include <tbb/blocked_range.h>
-#include <tbb/enumerable_thread_specific.h>
-#include <tbb/parallel_for.h>
-#include <tbb/parallel_reduce.h>
+#ifdef OPENVDB_USE_TBB
 #include <tbb/task_group.h>
+#endif
 
 #if UT_VERSION_INT >= 0x10050000 // 16.5.0 or later
   #include <hboost/algorithm/string/classification.hpp> // is_any_of
@@ -90,7 +87,6 @@
     namespace boostmpl = hboost::mpl;
   #else
 	#include <openvdb/external/brigand.hpp>
-	namespace boostmpl = brigand;
   #endif
 #else
   #include <boost/algorithm/string/classification.hpp> // is_any_of
@@ -101,6 +97,7 @@
   namespace boostmpl = boost::mpl;
 #endif
 
+#include <atomic>
 #include <algorithm> // std::sort
 #include <cmath> // trigonometric functions
 #include <memory>
@@ -368,8 +365,8 @@ struct PointCache
             mRadius.reset(new float[mSize]);
             mPos.reset(new openvdb::Vec3s[mSize]);
 
-            tbb::parallel_for(tbb::blocked_range<size_t>(0, mSize),
-                IFOCachePointGroupData(mOffsets, detail, mRadius, mPos, radiusScale));
+            OPENVDB_FOR_EACH(IFOCachePointGroupData(mOffsets, detail, mRadius, mPos, radiusScale),
+				openvdb::BlockedRange<size_t>(0, mSize));
 
             getOffset = &PointCache::offsetFromGroupMap;
         } else if (mIndexMap->isTrivialMap()) {
@@ -398,8 +395,8 @@ struct PointCache
         mRadius.reset(new float[mSize]);
         mPos.reset(new openvdb::Vec3s[mSize]);
 
-        tbb::parallel_for(tbb::blocked_range<size_t>(0, mSize),
-            IFOCopyPointData(indices, mOffsets, mRadius, mPos, rhs));
+        OPENVDB_FOR_EACH(IFOCopyPointData(indices, mOffsets, mRadius, mPos, rhs),
+			openvdb::BlockedRange<size_t>(0, mSize));
 
         getOffset = &PointCache::offsetFromGroupMap;
     }
@@ -419,13 +416,13 @@ struct PointCache
 
     float evalMaxRadius() const {
         IFOEvalMaxRadius op(mRadius.get());
-        tbb::parallel_reduce(tbb::blocked_range<size_t>(0, mSize), op);
+        OPENVDB_REDUCE(op, openvdb::BlockedRange<size_t>(0, mSize));
         return op.result;
     }
 
     float evalMinRadius() const {
         IFOEvalMinRadius op(mRadius.get());
-        tbb::parallel_reduce(tbb::blocked_range<size_t>(0, mSize), op);
+        OPENVDB_REDUCE(op, openvdb::BlockedRange<size_t>(0, mSize));
         return op.result;
     }
 
@@ -467,7 +464,7 @@ private:
         {
         }
 
-        void operator()(const tbb::blocked_range<size_t>& range) const
+        void operator()(const openvdb::BlockedRange<size_t>& range) const
         {
             const float* radiusData = mPointCache->radiusData();
             const openvdb::Vec3s* posData = mPointCache->posData();
@@ -559,7 +556,7 @@ private:
         {
         }
 
-        void operator()(const tbb::blocked_range<size_t>& range) const
+        void operator()(const openvdb::BlockedRange<size_t>& range) const
         {
             GA_ROHandleV3 posHandle(mDetail->getP());
 
@@ -601,10 +598,12 @@ private:
         IFOEvalMaxRadius(float const * const radiusArray)
             : mRadiusArray(radiusArray), result(-std::numeric_limits<float>::max()) {}
 
+#ifdef OPENVDB_USE_TBB
         IFOEvalMaxRadius(IFOEvalMaxRadius& rhs, tbb::split) // thread safe copy constructor
             : mRadiusArray(rhs.mRadiusArray), result(-std::numeric_limits<float>::max()){}
+#endif
 
-        void operator()(const tbb::blocked_range<size_t>& range) {
+        void operator()(const openvdb::BlockedRange<size_t>& range) {
             for (size_t n = range.begin(), N = range.end(); n != N; ++n) {
                  result = std::max(mRadiusArray[n], result);
             }
@@ -620,10 +619,12 @@ private:
         IFOEvalMinRadius(float const * const radiusArray)
             : mRadiusArray(radiusArray), result(std::numeric_limits<float>::max()) {}
 
+#ifdef OPENVDB_USE_TBB
         IFOEvalMinRadius(IFOEvalMinRadius& rhs, tbb::split) // thread safe copy constructor
             : mRadiusArray(rhs.mRadiusArray), result(std::numeric_limits<float>::max()){}
+#endif
 
-        void operator()(const tbb::blocked_range<size_t>& range) {
+        void operator()(const openvdb::BlockedRange<size_t>& range) {
             for (size_t n = range.begin(), N = range.end(); n != N; ++n) {
                  result = std::min(mRadiusArray[n], result);
             }
@@ -703,6 +704,7 @@ struct PointIndexGridCollection
         mMinRadiusArray.reset(new float[collectionSize]);
         mMaxRadiusArray.reset(new float[collectionSize]);
 
+#ifdef OPENVDB_USE_TBB
         tbb::task_group tasks;
 
         for (size_t n = 0; n < collectionSize; ++n) {
@@ -714,6 +716,10 @@ struct PointIndexGridCollection
         }
 
         tasks.wait();
+#else
+		for (size_t n = 0; n < collectionSize; ++n)
+			IFOCreateAuxiliaryData(mIdxGridArray[n], *mPointCacheArray[n], voxelSizeList[n], mMinRadiusArray[n], mMaxRadiusArray[n])();
+#endif
     }
 
     //////////
@@ -806,7 +812,7 @@ struct ConstructCandidateVoxelMask
     {
     }
 
-    /// Thread safe copy constructor
+#ifdef OPENVDB_USE_TBB
     ConstructCandidateVoxelMask(ConstructCandidateVoxelMask& rhs, tbb::split)
         : mMaskTree(false)
         , mMaskTreePt(&mMaskTree)
@@ -818,8 +824,9 @@ struct ConstructCandidateVoxelMask
         , mInterrupter(rhs.mInterrupter)
     {
     }
+#endif
 
-    void operator()(const tbb::blocked_range<size_t>& range) {
+    void operator()(const openvdb::BlockedRange<size_t>& range) {
 
         openvdb::CoordBBox box;
         PosType pos, bboxMin, bboxMax, pMin, pMax;
@@ -834,10 +841,12 @@ struct ConstructCandidateVoxelMask
 
         for (size_t n = range.begin(), N = range.end(); n != N; ++n) {
 
+#ifdef OPENVDB_USE_TBB
             if (this->wasInterrupted()) {
                 tbb::task::self().cancel_group_execution();
                 break;
             }
+#endif
 
             const PointIndexLeafNode& node = *mPointIndexNodes[n];
 
@@ -973,7 +982,11 @@ struct ConstructCandidateVoxelMask
 
         using BoolRootNodeType = BoolTreeType::RootNodeType;
         using BoolNodeChainType = BoolRootNodeType::NodeChainType;
+#ifdef SESI_OPENVDB
         using BoolInternalNodeType = boostmpl::at<BoolNodeChainType, boostmpl::int_<1>>::type;
+#else
+		using BoolInternalNodeType = brigand::at<BoolNodeChainType, std::integral_constant<int, 1>>;
+#endif
 
         for (size_t n = 0, N = rhsLeafNodes.size(); n < N; ++n) {
             const openvdb::Coord& ijk = rhsLeafNodes[n]->origin();
@@ -997,8 +1010,8 @@ struct ConstructCandidateVoxelMask
         }
 
         // Combine overlapping leaf nodes
-        tbb::parallel_for(tbb::blocked_range<size_t>(0, overlappingLeafNodes.size()),
-            IFOTopologyUnion(*mMaskTreePt, &overlappingLeafNodes[0]));
+        OPENVDB_FOR_EACH(IFOTopologyUnion(*mMaskTreePt, &overlappingLeafNodes[0]),
+			openvdb::BlockedRange<size_t>(0, overlappingLeafNodes.size()));
     }
 
 private:
@@ -1115,7 +1128,7 @@ private:
         IFOTopologyUnion(BoolTreeType& tree, BoolLeafNode ** nodes)
             : mTree(&tree), mNodes(nodes) { }
 
-        void operator()(const tbb::blocked_range<size_t>& range) const {
+        void operator()(const openvdb::BlockedRange<size_t>& range) const {
             openvdb::tree::ValueAccessor<BoolTreeType> acc(*mTree);
             for (size_t n = range.begin(), N = range.end(); n < N; ++n) {
                 acc.probeLeaf(mNodes[n]->origin())->topologyUnion(*mNodes[n]);
@@ -1156,7 +1169,7 @@ struct CullFrustumLeafNodes
     {
     }
 
-    void operator()(const tbb::blocked_range<size_t>& range) const {
+    void operator()(const openvdb::BlockedRange<size_t>& range) const {
 
         using PointIndexTree = openvdb::tools::PointIndexGrid::TreeType;
         using IndexTreeAccessor = openvdb::tree::ValueAccessor<const PointIndexTree>;
@@ -1285,7 +1298,7 @@ maskRegionOfInterest(PointIndexGridCollection::BoolTreeType& mask,
         ConstructCandidateVoxelMask op(mask, pointCache,
             pointIndexLeafNodes, volumeTransform, frustumClipBox.get(), interrupter);
 
-        tbb::parallel_reduce(tbb::blocked_range<size_t>(0, pointIndexLeafNodes.size()), op);
+        OPENVDB_REDUCE(op, openvdb::BlockedRange<size_t>(0, pointIndexLeafNodes.size()));
     }
 
     if (interrupter && interrupter->wasInterrupted()) return;
@@ -1295,8 +1308,8 @@ maskRegionOfInterest(PointIndexGridCollection::BoolTreeType& mask,
         std::vector<BoolLeafNodeType*> maskNodes;
         mask.getNodes(maskNodes);
 
-        tbb::parallel_for(tbb::blocked_range<size_t>(0, maskNodes.size()),
-            CullFrustumLeafNodes<BoolLeafNodeType>(idxGridCollection, maskNodes, volumeTransform));
+        OPENVDB_FOR_EACH(CullFrustumLeafNodes<BoolLeafNodeType>(idxGridCollection, maskNodes, volumeTransform),
+			openvdb::BlockedRange<size_t>(0, maskNodes.size()));
 
         openvdb::tools::pruneInactive(mask);
     }
@@ -1313,7 +1326,7 @@ struct FillActiveValues
     {
     }
 
-    void operator()(const tbb::blocked_range<size_t>& range) const {
+    void operator()(const openvdb::BlockedRange<size_t>& range) const {
         for (size_t n = range.begin(), N = range.end(); n < N; ++n) {
             NodeType& node = *mNodes[n];
             for (typename NodeType::ValueOnIter it = node.beginValueOn(); it; ++it) {
@@ -1664,7 +1677,7 @@ struct Attribute
         typename GridType::Ptr grid = GridType::create();
         IFOPopulateTree op(grid->tree(), mNodes.get());
 
-        tbb::parallel_reduce(tbb::blocked_range<size_t>(0, mNodeCount), op);
+        OPENVDB_REDUCE(op, openvdb::BlockedRange<size_t>(0, mNodeCount));
 
         grid->setTransform(
             openvdb::math::Transform::createLinearTransform(voxelSize));
@@ -1710,7 +1723,7 @@ struct Attribute
 
         IFOPopulateTree op(grid->tree(), mOutputNodes.empty() ? nullptr : &mOutputNodes.front());
 
-        tbb::parallel_reduce(tbb::blocked_range<size_t>(0, mOutputNodes.size()), op);
+        OPENVDB_REDUCE(op, openvdb::BlockedRange<size_t>(0, mOutputNodes.size()));
 
         if (!grid->tree().empty()) {
             grid->setTransform(mTransform.copy());
@@ -1768,10 +1781,12 @@ private:
         IFOPopulateTree(TreeType& tree, LeafNodeType ** nodes)
             : mTree(), mAccessor(tree) , mNodes(nodes) {}
 
+#ifdef OPENVDB_USE_TBB
         IFOPopulateTree(IFOPopulateTree& rhs, tbb::split) // Thread safe copy constructor
             : mTree(rhs.mAccessor.tree().background()), mAccessor(mTree), mNodes(rhs.mNodes) {}
+#endif
 
-        void operator()(const tbb::blocked_range<size_t>& range) {
+        void operator()(const openvdb::BlockedRange<size_t>& range) {
             for (size_t n = range.begin(), N = range.end(); n != N; ++n) {
                 if (mNodes[n]) {
                     mAccessor.addLeaf(mNodes[n]);
@@ -1997,13 +2012,13 @@ struct VEXContext {
     bool isTimeDependant() const { return mIsTimeDependant == 1; }
 
 private:
-    tbb::enumerable_thread_specific<VEXProgram::Ptr> mThreadLocalTable;
+    openvdb::EnumerableThreadSpecific<VEXProgram::Ptr> mThreadLocalTable;
     OP_Caller* mCaller;
     UT_String mVexScript;
     UT_WorkArgs mVexArgs;
     const size_t mMaxArraySize;
     fpreal mTime, mTimeInc, mFrame;
-    tbb::atomic<int> mIsTimeDependant;
+    std::atomic<int> mIsTimeDependant;
     GU_VexGeoInputs mVexInputs;
 };
 
@@ -2087,7 +2102,7 @@ struct RasterizePoints
     {
     }
 
-    void operator()(const tbb::blocked_range<size_t>& range) const {
+    void operator()(const openvdb::BlockedRange<size_t>& range) const {
 
         // Setup attribute operators
 
@@ -2140,10 +2155,12 @@ struct RasterizePoints
 
         for (size_t n = range.begin(), N = range.end(); n != N; ++n) {
 
+#ifdef OPENVDB_USE_TBB
             if (this->wasInterrupted()) {
                 tbb::task::self().cancel_group_execution();
                 break;
             }
+#endif
 
             const BoolLeafNodeType& maskNode = *mRegionMaskNodes[n];
             if (maskNode.isEmpty()) continue;
@@ -2695,8 +2712,8 @@ rasterize(RasterizationSettings& settings, std::vector<openvdb::GridBase::Ptr>& 
         std::vector<BoolLeafNodeType*> maskNodes;
         exportMask->tree().getNodes(maskNodes);
 
-        tbb::parallel_for(tbb::blocked_range<size_t>(0, maskNodes.size()),
-            FillActiveValues<BoolLeafNodeType>(maskNodes, true));
+        OPENVDB_FOR_EACH(FillActiveValues<BoolLeafNodeType>(maskNodes, true),
+			openvdb::BlockedRange<size_t>(0, maskNodes.size()));
 
         outputGrids.push_back(exportMask);
     }
@@ -2728,7 +2745,7 @@ rasterize(RasterizationSettings& settings, std::vector<openvdb::GridBase::Ptr>& 
         op.setFloatAttributes(scalarAttributes);
         op.setVEXContext(settings.vexContext);
 
-        tbb::parallel_for(tbb::blocked_range<size_t>(0, maskNodes.size()), op);
+        OPENVDB_FOR_EACH(op, openvdb::BlockedRange<size_t>(0, maskNodes.size()));
 
         cacheAttributeBuffers(densityAttribute);
         cacheAttributeBuffers(vectorAttributes);
@@ -2821,7 +2838,7 @@ rasterize(RasterizationSettings& settings, std::vector<openvdb::GridBase::Ptr>& 
             op.setFloatAttributes(scalarAttributes);
             op.setVEXContext(settings.vexContext);
 
-            tbb::parallel_for(tbb::blocked_range<size_t>(0, subregionNodeCount), op);
+            OPENVDB_FOR_EACH(op, openvdb::BlockedRange<size_t>(0, subregionNodeCount));
 
             cacheFrustumAttributeBuffers(densityAttribute, frustumNodeQueue, voxelSize);
             cacheFrustumAttributeBuffers(vectorAttributes, frustumNodeQueue, voxelSize);

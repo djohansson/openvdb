@@ -240,7 +240,7 @@ public:
     const ValueType& maxVoxel() const { return mMax; }
 
     inline MinMaxVoxel(const MinMaxVoxel<TreeType>&, tbb::split);
-    inline void operator()(const tbb::blocked_range<size_t>&);
+    inline void operator()(const openvdb::BlockedRange<size_t>&);
     inline void join(const MinMaxVoxel<TreeType>&);
 
 private:
@@ -286,7 +286,7 @@ MinMaxVoxel<TreeType>::runSerial()
 
 template <class TreeType>
 inline void
-MinMaxVoxel<TreeType>::operator()(const tbb::blocked_range<size_t>& range)
+MinMaxVoxel<TreeType>::operator()(const openvdb::BlockedRange<size_t>& range)
 {
     typename TreeType::LeafNodeType::ValueOnCIter iter;
 
@@ -473,7 +473,7 @@ protected:
         LeafOp(const LeafManagerType& leafs, WireBoxBuilder& boxBuilder, const openvdb::Vec3s& color)
             : mLeafs(&leafs), mBoxBuilder(&boxBuilder), mColor(color) {}
 
-        void operator()(const tbb::blocked_range<size_t>& range) const
+        void operator()(const openvdb::BlockedRange<size_t>& range) const
         {
             openvdb::CoordBBox bbox;
             openvdb::Coord& min = bbox.min();
@@ -653,7 +653,7 @@ public:
     }
 
 
-    inline void operator()(const tbb::blocked_range<size_t>& range) const
+    inline void operator()(const openvdb::BlockedRange<size_t>& range) const
     {
         using ValueOnCIter = typename TreeType::LeafNodeType::ValueOnCIter;
 
@@ -778,10 +778,10 @@ public:
     void runParallel()
     {
         tbb::parallel_for(
-            tbb::blocked_range<size_t>(0, (mPoints->size() / 3)), *this);
+            openvdb::BlockedRange<size_t>(0, (mPoints->size() / 3)), *this);
     }
 
-    inline void operator()(const tbb::blocked_range<size_t>& range) const
+    inline void operator()(const openvdb::BlockedRange<size_t>& range) const
     {
         openvdb::Coord ijk;
         openvdb::Vec3d pos, tmpNormal, normal(0.0, -1.0, 0.0);

@@ -126,7 +126,7 @@ struct VDBToMayaMesh::PointCopyOp
     PointCopyOp(MFloatPointArray& mayaPoints, const openvdb::tools::PointList& vdbPoints)
         : mMayaPoints(&mayaPoints) , mVdbPoints(&vdbPoints) { }
 
-    void operator()(const tbb::blocked_range<size_t>& range) const {
+    void operator()(const openvdb::BlockedRange<size_t>& range) const {
         for (size_t n = range.begin(),  N = range.end(); n < N; ++n) {
             const openvdb::Vec3s& p_vdb = (*mVdbPoints)[n];
             MFloatPoint& p_maya = (*mMayaPoints)[static_cast<unsigned int>(n)];
@@ -157,7 +157,7 @@ struct VDBToMayaMesh::FaceCopyOp
     {
     }
 
-    void operator()(const tbb::blocked_range<size_t>& range) const {
+    void operator()(const openvdb::BlockedRange<size_t>& range) const {
         const uint32_t numQuads = mNumQuadsPrefix[range.begin()];
         const uint32_t numTriangles = mNumTrianglesPrefix[range.begin()];
 
@@ -225,7 +225,7 @@ VDBToMayaMesh::operator()(typename GridType::ConstPtr grid)
         polygonCounts.setLength(numQuads + numTriangles);
         polygonConnects.setLength(4*numQuads + 3*numTriangles);
 
-        tbb::parallel_for(tbb::blocked_range<size_t>(0, polygonPoolListSize),
+        tbb::parallel_for(openvdb::BlockedRange<size_t>(0, polygonPoolListSize),
             FaceCopyOp(polygonConnects, polygonCounts,
                 numQuadsPrefix, numTrianglesPrefix, polygonPoolList));
 
@@ -236,7 +236,7 @@ VDBToMayaMesh::operator()(typename GridType::ConstPtr grid)
     const size_t numPoints = mMesher->pointListSize();
     MFloatPointArray vertexArray(static_cast<unsigned int>(numPoints));
 
-    tbb::parallel_for(tbb::blocked_range<size_t>(0, numPoints),
+    tbb::parallel_for(openvdb::BlockedRange<size_t>(0, numPoints),
         PointCopyOp(vertexArray, mMesher->pointList()));
 
     mMesher->pointList().reset(); // delete points

@@ -1388,12 +1388,12 @@ public:
 
     void run(bool threaded = true)
     {
-	tbb::blocked_range<int> range(0, mVolume.numTiles());
-	if (threaded) tbb::parallel_for(range, *this);
+	openvdb::BlockedRange<int> range(0, mVolume.numTiles());
+	if (threaded) OPENVDB_FOR_EACH(*this, range);
 	else (*this)(range);
     }
 
-    void operator()(const tbb::blocked_range<int>& range) const
+    void operator()(const openvdb::BlockedRange<int>& range) const
     {
 	uint8 bcnt = 0;
 	for (int i = range.begin(); i != range.end(); ++i) {
@@ -1429,12 +1429,12 @@ public:
 
     void run(bool threaded = true)
     {
-	tbb::blocked_range<int> range(0, mVolume.numTiles());
-	if (threaded) tbb::parallel_for(range, *this);
+	openvdb::BlockedRange<int> range(0, mVolume.numTiles());
+	if (threaded) OPENVDB_FOR_EACH(*this, range);
 	else (*this)(range);
     }
 
-    void operator()(const tbb::blocked_range<int>& range) const
+    void operator()(const openvdb::BlockedRange<int>& range) const
     {
 	uint8 bcnt = 0;
 	for (int i = range.begin(); i != range.end(); ++i) {

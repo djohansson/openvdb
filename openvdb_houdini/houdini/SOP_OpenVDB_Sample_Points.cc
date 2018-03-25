@@ -40,12 +40,17 @@
 #include <openvdb_houdini/Utils.h>
 #include <openvdb_houdini/SOP_NodeVDB.h>
 #include <openvdb/tools/Interpolation.h>  // for box sampler
-#include <tbb/tick_count.h>                 // for timing
+
+#ifdef OPENVDB_USE_TBB
 #include <tbb/task.h>                       // for cancel
+#endif
+
 #include <UT/UT_Interrupt.h>
 #include <GA/GA_PageHandle.h>
 #include <GA/GA_PageIterator.h>
+
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -175,10 +180,11 @@ public:
     // only the supported versions don't throw
     void operator() (const GA_SplittableRange& range) const
     {
-
+#ifdef OPENVDB_USE_TBB
         if (mInterrupter->wasInterrupted()) {
             tbb::task::self().cancel_group_execution();
         }
+#endif
         const GridType& grid = UTvdbGridCast<GridType>(mGrid);
         // task local grid accessor
         Accessor accessor = grid.getAccessor();
@@ -368,7 +374,9 @@ VDB_NODE_OR_CACHE(VDB_COMPILABLE_SOP, SOP_OpenVDB_Sample_Points)::cookVDBSop(OP_
         int numUnnamedGrids = 0;
 
         // start time
-        tbb::tick_count time_start = tbb::tick_count::now();
+		using hires_clock = std::chrono::high_resolution_clock;
+		using time_point = hires_clock::time_point;
+		time_point time_start = hires_clock::now();
         UT_AutoInterrupt progress("Sampling from VDB grids");
 
 
@@ -526,14 +534,14 @@ VDB_NODE_OR_CACHE(VDB_COMPILABLE_SOP, SOP_OpenVDB_Sample_Points)::cookVDBSop(OP_
         }//end iter
 
         // timing: end time
-        tbb::tick_count time_end = tbb::tick_count::now();
+		time_point time_end = hires_clock::now();
 
         if (verbose) {
             std::cout << "Sampling " << nPoints << " points in "
                       << numVectorGrids << " vector grid" << (numVectorGrids == 1 ? "" : "s")
                       << " and " << numScalarGrids << " scalar grid"
                           << (numScalarGrids == 1 ? "" : "s")
-                      << " took " << (time_end - time_start).seconds() << " seconds\n "
+                      << " took " << std::chrono::duration_cast<std::chrono::seconds>(time_end - time_start).count() << " seconds\n "
                       << ( (threaded) ? "threaded" : "non-threaded") <<std::endl;
         }
 

@@ -631,7 +631,7 @@ void
 MeshAttrTransfer::runParallel()
 {
     IterRange range(mClosestPrimGrid.tree().beginLeaf());
-    tbb::parallel_for(range, *this);
+    OPENVDB_FOR_EACH(*this, range);
 }
 
 void
@@ -808,7 +808,7 @@ void
 PointAttrTransfer::runParallel()
 {
     IterRange range(mClosestPtnIdxGrid.tree().beginLeaf());
-    tbb::parallel_for(range, *this);
+	OPENVDB_FOR_EACH(*this, range);
 }
 
 void

@@ -307,9 +307,9 @@ NodeOp::operator()(const BlockedRange<size_t>& range) const
         avg[1] = 0.0;
         avg[2] = 0.0;
 
-        int count = int(mLeafRanges[n].second) - int(mLeafRanges[n].first);
+        int count = int(mLeafRanges[n].end()) - int(mLeafRanges[n].begin());
 
-        for (size_t i = mLeafRanges[n].first; i < mLeafRanges[n].second; ++i) {
+        for (size_t i = mLeafRanges[n].begin(); i < mLeafRanges[n].end(); ++i) {
             avg[0] += mLeafBoundingSpheres[i][0];
             avg[1] += mLeafBoundingSpheres[i][1];
             avg[2] += mLeafBoundingSpheres[i][2];
@@ -320,7 +320,7 @@ NodeOp::operator()(const BlockedRange<size_t>& range) const
 
         double maxDist = 0.0;
 
-        for (size_t i = mLeafRanges[n].first; i < mLeafRanges[n].second; ++i) {
+        for (size_t i = mLeafRanges[n].begin(); i < mLeafRanges[n].end(); ++i) {
             pos[0] = mLeafBoundingSpheres[i][0];
             pos[1] = mLeafBoundingSpheres[i][1];
             pos[2] = mLeafBoundingSpheres[i][2];
@@ -458,8 +458,8 @@ ClosestPointDist<Index32LeafT>::evalNode(size_t pointIndex, size_t nodeIndex) co
     Vec3R center;
     bool updatedDist = false;
 
-    for (size_t i = mLeafRanges[nodeIndex].first, n = 0;
-        i < mLeafRanges[nodeIndex].second; ++i, ++n)
+    for (size_t i = mLeafRanges[nodeIndex].begin(), n = 0;
+        i < mLeafRanges[nodeIndex].end(); ++i, ++n)
     {
         float& distToLeaf = const_cast<float&>(mLeafDistances[n]);
 
@@ -481,8 +481,8 @@ ClosestPointDist<Index32LeafT>::evalNode(size_t pointIndex, size_t nodeIndex) co
 
     evalLeaf(pointIndex, *mLeafNodes[minDistIdx]);
 
-    for (size_t i = mLeafRanges[nodeIndex].first, n = 0;
-        i < mLeafRanges[nodeIndex].second; ++i, ++n)
+    for (size_t i = mLeafRanges[nodeIndex].begin(), n = 0;
+        i < mLeafRanges[nodeIndex].end(); ++i, ++n)
     {
         if (mLeafDistances[n] < mInstanceDistances[pointIndex] && i != minDistIdx) {
             evalLeaf(pointIndex, *mLeafNodes[i]);
@@ -551,6 +551,8 @@ public:
 
 #ifdef OPENVDB_USE_TBB
     UpdatePoints(UpdatePoints&, tbb::split);
+#endif
+
     inline void operator()(const BlockedRange<size_t>& range);
     void join(const UpdatePoints& rhs)
     {
@@ -559,7 +561,6 @@ public:
             mIndex = rhs.mIndex;
         }
     }
-#endif
 
 private:
     const Vec4s& mSphere;
@@ -606,9 +607,9 @@ inline void
 UpdatePoints::run(bool threaded)
 {
     if (threaded) {
-        OPENVDB_REDUCE(*this, BlockedRange<size_t>(0, mPoints.size()));
+        OPENVDB_REDUCE(*this, openvdb::BlockedRange<size_t>(0, mPoints.size()));
     } else {
-        (*this)(BlockedRange<size_t>(0, mPoints.size()));
+        (*this)(openvdb::BlockedRange<size_t>(0, mPoints.size()));
     }
 }
 
@@ -899,9 +900,9 @@ ClosestSurfacePoint<GridT>::initialize(
 
     typename Index32InternalNodeT::ChildOnCIter leafIt;
     mMaxNodeLeafs = 0;
-    for (size_t n = 0, N = internalNodes.size(); n < N; ++n) {
-
-        mLeafRanges[n].first = mLeafNodes.size();
+    for (size_t n = 0, N = internalNodes.size(); n < N; ++n)
+	{
+        auto rangeBegin = mLeafNodes.size();
 
         size_t leafCount = 0;
         for (leafIt = internalNodes[n]->cbeginChildOn(); leafIt; ++leafIt) {
@@ -911,7 +912,7 @@ ClosestSurfacePoint<GridT>::initialize(
 
         mMaxNodeLeafs = std::max(leafCount, mMaxNodeLeafs);
 
-        mLeafRanges[n].second = mLeafNodes.size();
+		mLeafRanges[n] = IndexRange(rangeBegin, mLeafNodes.size());
     }
 
     std::vector<Vec4R>().swap(mLeafBoundingSpheres);

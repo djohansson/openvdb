@@ -47,9 +47,6 @@
 #include <PRM/PRM_Parm.h>
 #include <UT/UT_Version.h>
 
-#include <tbb/blocked_range.h>
-#include <tbb/parallel_for.h>
-
 #include <memory>
 #include <stdexcept>
 
@@ -104,7 +101,7 @@ struct SetOffsets
     SetOffsets(const GU_Detail& srcGeo, const PointPartitioner& partitioner, GA_Offset* offsetArray)
         : mSrcGeo(&srcGeo), mPartitioner(&partitioner), mOffsetArray(offsetArray) { }
 
-    void operator()(const tbb::blocked_range<size_t>& range) const {
+    void operator()(const openvdb::BlockedRange<size_t>& range) const {
 
         size_t idx = 0;
         for (size_t n = 0, N = range.begin(); n != N; ++n) {
@@ -231,8 +228,8 @@ VDB_NODE_OR_CACHE(VDB_COMPILABLE_SOP, SOP_OpenVDB_Sort_Points)::cookVDBSop(OP_Co
             numPoints = points.size();
             srcOffsetArray.reset(new GA_Offset[numPoints]);
 
-            tbb::parallel_for(tbb::blocked_range<size_t>(0, partitioner.size()),
-                SetOffsets(*srcGeo, partitioner, srcOffsetArray.get()));
+            OPENVDB_FOR_EACH(SetOffsets(*srcGeo, partitioner, srcOffsetArray.get()),
+				openvdb::BlockedRange<size_t>(0, partitioner.size()));
         }
 
         // order point attributes

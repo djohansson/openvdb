@@ -377,7 +377,7 @@ public:
              : mAuxBuffers[leafIdx * mAuxBuffersPerLeaf + bufferIdx - 1];
     }
 
-    /// @brief Return a @c tbb::blocked_range of leaf array indices.
+    /// @brief Return a @c openvdb::BlockedRange of leaf array indices.
     ///
     /// @note Consider using leafRange() instead, which provides access methods
     /// to leaf nodes and buffers.

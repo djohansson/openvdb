@@ -219,6 +219,7 @@ struct PackedMaskConstructor
         mMaskGrid->setTransform(mXForm.copy());
     }
 
+#ifdef OPENVDB_USE_TBB
     PackedMaskConstructor(PackedMaskConstructor& rhs, tbb::split)
         : mPrims(rhs.mPrims)
         , mXForm(rhs.mXForm)
@@ -226,12 +227,13 @@ struct PackedMaskConstructor
     {
         mMaskGrid->setTransform(mXForm.copy());
     }
+#endif
 
     openvdb::MaskGrid::Ptr getMaskGrid() { return mMaskGrid; }
 
     void join(PackedMaskConstructor& rhs) { mMaskGrid->tree().topologyUnion(rhs.mMaskGrid->tree()); }
 
-    void operator()(const tbb::blocked_range<size_t>& range)
+    void operator()(const openvdb::BlockedRange<size_t>& range)
     {
         GU_PackedContext packedcontext;
 
@@ -375,7 +377,7 @@ GUvdbCreatePointMaskGrid(
 
     if (!packed.empty()) {
         GU_VDBPointToolsInternal::PackedMaskConstructor op(packed, xform);
-        tbb::parallel_reduce(tbb::blocked_range<size_t>(0, packed.size()), op);
+        OPENVDB_REDUCE(op, openvdb::BlockedRange<size_t>(0, packed.size()));
         return op.getMaskGrid();
     }
 

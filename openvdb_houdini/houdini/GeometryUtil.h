@@ -209,7 +209,7 @@ public:
 
     void run(bool threaded = true);
 
-    void operator()(const tbb::blocked_range<size_t>&) const;
+    void operator()(const openvdb::BlockedRange<size_t>&) const;
 
 private:
     const GU_Detail& mRefGeo;
@@ -237,7 +237,7 @@ void
 GenAdaptivityMaskOp<IndexTreeType, BoolTreeType>::run(bool threaded)
 {
     if (threaded) {
-        tbb::parallel_for(mLeafs.getRange(), *this);
+		OPENVDB_FOR_EACH(*this, mLeafs.getRange());
     } else {
         (*this)(mLeafs.getRange());
     }
@@ -247,7 +247,7 @@ GenAdaptivityMaskOp<IndexTreeType, BoolTreeType>::run(bool threaded)
 template<typename IndexTreeType, typename BoolTreeType>
 void
 GenAdaptivityMaskOp<IndexTreeType, BoolTreeType>::operator()(
-    const tbb::blocked_range<size_t>& range) const
+    const openvdb::BlockedRange<size_t>& range) const
 {
     using IndexAccessorType = typename openvdb::tree::ValueAccessor<const IndexTreeType>;
     IndexAccessorType idxAcc(mIndexTree);

@@ -44,16 +44,11 @@
 #include <GU/GU_Detail.h>
 #include <PRM/PRM_Parm.h>
 
-#include <tbb/blocked_range.h>
-#include <tbb/parallel_for.h>
-#include <tbb/parallel_reduce.h>
-
 #ifdef SESI_OPENVDB
   #include <hboost/mpl/at.hpp>
   namespace boostmpl = hboost::mpl;
 #else
 	#include <openvdb/external/brigand.hpp>
-	namespace boostmpl = brigand;
 #endif
 
 #include <algorithm>
@@ -130,16 +125,18 @@ struct NodeMinMax
         : mNodes(&nodes[0]), mBackground(background), mMin(background), mMax(background)
     {}
 
+#ifdef OPENVDB_USE_TBB
     NodeMinMax(NodeMinMax& other, tbb::split)
         : mNodes(other.mNodes), mBackground(other.mBackground), mMin(mBackground), mMax(mBackground)
     {}
+#endif
 
     void join(NodeMinMax& other) {
         mMin = minValue(other.mMin, mMin);
         mMax = maxValue(other.mMax, mMax);
     }
 
-    void operator()(const tbb::blocked_range<size_t>& range) {
+    void operator()(const openvdb::BlockedRange<size_t>& range) {
         ValueType minTmp(mMin), maxTmp(mMax);
         for (size_t n = range.begin(), N = range.end(); n < N; ++n) {
             const NodeType& node = *mNodes[n];
@@ -169,7 +166,7 @@ struct Deactivate
         : mNodes(&nodes[0]), mBackground(background)
     {}
 
-    void operator()(const tbb::blocked_range<size_t>& range) const {
+    void operator()(const openvdb::BlockedRange<size_t>& range) const {
         const ValueType
             background(mBackground),
             delta = openvdb::math::Tolerance<ValueType>::value();
@@ -201,7 +198,7 @@ evalMinMax(const TreeType& tree,
         tree.getNodes(nodes);
 
         NodeMinMax<LeafNodeType> op(nodes, tree.background());
-        tbb::parallel_reduce(tbb::blocked_range<size_t>(0, nodes.size()), op);
+        OPENVDB_REDUCE(op, openvdb::BlockedRange<size_t>(0, nodes.size()));
 
         minVal = minValue(minVal, op.mMin);
         maxVal = maxValue(maxVal, op.mMax);
@@ -210,13 +207,17 @@ evalMinMax(const TreeType& tree,
     { // eval first tiles
         using RootNodeType = typename TreeType::RootNodeType;
         using NodeChainType = typename RootNodeType::NodeChainType;
-        using InternalNodeType = typename boostmpl::at<NodeChainType, boostmpl::int_<1>>::type;
+#ifdef SESI_OPENVDB
+		using InternalNodeType = typename boostmpl::at<NodeChainType, boostmpl::int_<1>>::type;
+#else
+		using InternalNodeType = brigand::at<NodeChainType, std::integral_constant<int, 1>>;
+#endif
 
         std::vector<const InternalNodeType*> nodes;
         tree.getNodes(nodes);
 
         NodeMinMax<InternalNodeType> op(nodes, tree.background());
-        tbb::parallel_reduce(tbb::blocked_range<size_t>(0, nodes.size()), op);
+		OPENVDB_REDUCE(op, openvdb::BlockedRange<size_t>(0, nodes.size()));
 
         minVal = minValue(minVal, op.mMin);
         maxVal = maxValue(maxVal, op.mMax);
@@ -247,19 +248,23 @@ deactivateBackgroundValues(TreeType& tree)
         tree.getNodes(nodes);
 
         Deactivate<LeafNodeType> op(nodes, tree.background());
-        tbb::parallel_for(tbb::blocked_range<size_t>(0, nodes.size()), op);
+        OPENVDB_FOR_EACH(op, openvdb::BlockedRange<size_t>(0, nodes.size()));
     }
 
     { // eval first tiles
         using RootNodeType = typename TreeType::RootNodeType;
         using NodeChainType = typename RootNodeType::NodeChainType;
-        using InternalNodeType = typename boostmpl::at<NodeChainType, boostmpl::int_<1>>::type;
+#ifdef SESI_OPENVDB
+		using InternalNodeType = typename boostmpl::at<NodeChainType, boostmpl::int_<1>>::type;
+#else
+		using InternalNodeType = brigand::at<NodeChainType, std::integral_constant<int, 1>>;
+#endif
 
         std::vector<InternalNodeType*> nodes;
         tree.getNodes(nodes);
 
         Deactivate<InternalNodeType> op(nodes, tree.background());
-        tbb::parallel_for(tbb::blocked_range<size_t>(0, nodes.size()), op);
+		OPENVDB_FOR_EACH(op, openvdb::BlockedRange<size_t>(0, nodes.size()));
     }
 
     { // eval remaining tiles
@@ -331,7 +336,7 @@ struct RemapGridValues {
             mInMin, mInMax, mOutMin, mOutMax);
 
         // update voxels
-        tbb::parallel_for(tbb::blocked_range<size_t>(0, leafnodes.size()), op);
+        OPENVDB_FOR_EACH(op, openvdb::BlockedRange<size_t>(0, leafnodes.size()));
 
         // update tiles
         typename GridType::ValueAllIter it = grid.beginValueAll();
@@ -387,7 +392,7 @@ private:
             xScale = std::abs(xScale) > fpreal(0.0) ? fpreal(1.0) / xScale : fpreal(0.0);
         }
 
-        inline void operator()(const tbb::blocked_range<size_t>& range) const {
+        inline void operator()(const openvdb::BlockedRange<size_t>& range) const {
             for (size_t n = range.begin(), N = range.end(); n < N; ++n) {
                 typename GridType::ValueType * data = nodes[n]->buffer().data();
                 for (size_t i = 0, I = LeafNodeType::SIZE; i < I; ++i) {
