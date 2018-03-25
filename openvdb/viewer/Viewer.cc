@@ -409,8 +409,10 @@ ThreadManager::doView()
 {
     // This function runs in its own thread.
     // The mClose and mRedisplay flags are set from the main thread.
-    while (!mClose) {
-        if (mRedisplay.compare_and_swap(/*set to*/false, /*if*/true)) {
+    while (!mClose)
+    {
+        bool expected(true);
+        if (mRedisplay.compare_exchange_weak(expected, false, std::memory_order_relaxed)) {
             if (sViewer) sViewer->view(mGrids);
         }
         sViewer->sleep(0.5/*sec*/);

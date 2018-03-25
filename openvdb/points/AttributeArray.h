@@ -297,7 +297,7 @@ protected:
     uint8_t mSerializationFlags = 0;
 
 #if OPENVDB_ABI_VERSION_NUMBER >= 5
-    std::atomic<Index32> mOutOfCore = 0; // interpreted as bool
+    std::atomic<Index32> mOutOfCore = {0}; // interpreted as bool
 #endif
 
     /// used for out-of-core, paged reading

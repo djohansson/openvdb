@@ -2374,7 +2374,6 @@ TestFile::testAsync()
 {
     using namespace openvdb;
 
-	using namespace std::chrono_literals;
 	using hires_clock = std::chrono::high_resolution_clock;
 	using time_point = hires_clock::time_point;
 
@@ -2430,7 +2429,7 @@ TestFile::testAsync()
             if (std::chrono::duration_cast<std::chrono::seconds>(hires_clock::now() - start).count() > 60) break; // time out after 1 minute
 
 			// Wait one second for tasks to complete.
-			std::this_thread::sleep_for(1s);
+            std::this_thread::sleep_for(std::chrono::seconds(1));
 
             // Poll each task in the pending map.
             std::set<io::Queue::Id> ids = helper.ids; // iterate over a copy
@@ -2462,7 +2461,7 @@ TestFile::testAsync()
 			helper.notifier();
 		});
         while (!queue.empty()) {
-			std::this_thread::sleep_for(1s);
+            std::this_thread::sleep_for(std::chrono::seconds(1));
         }
     }
 #if 0 // need to rewrite this test - it is way too non-deterministic atm.

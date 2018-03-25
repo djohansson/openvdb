@@ -450,7 +450,7 @@ inline auto operator*(const Vec4<T> &v, S scalar) -> Vec4<decltype(S() * T())>
 template <typename T0, typename T1>
 inline auto operator*(const Vec4<T0> &v0, const Vec4<T1> &v1) -> Vec4<decltype(T0() * T1())>
 {
-	Vec4<decltype(S() * T())> result(v0[0]*v1[0], v0[1]*v1[1], v0[2]*v1[2], v0[3]*v1[3]);
+	Vec4<decltype(T0() * T1())> result(v0[0]*v1[0], v0[1]*v1[1], v0[2]*v1[2], v0[3]*v1[3]);
     return result;
 }
 
