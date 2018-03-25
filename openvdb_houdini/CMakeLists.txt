@@ -32,12 +32,12 @@ PROJECT ( OpenVDB_Houdini )
 OPTION ( OPENVDB_HOUDINI_SUBDIR "Install plugins to <prefix>/houdini/<version> instead of <prefix>/houdini<version>" OFF)
 OPTION ( OPENVDB_HOUDINI_SHORT_VERSION "User major.minor as <version> instead of major.minor.patch" ON )
 OPTION ( OPENVDB_HOUDINI_INSTALL_LIBRARY "Install headers and place the shared library in a lib directory." OFF)
+
 FIND_PACKAGE ( HDK REQUIRED )
 
 # Checking if hdk version is >= 16.5
 # Houdini 16.5 stopped shipping boost.
-IF (( HDK_VERSION_MAJOR GREATER 16 ) OR 
-    (( HDK_VERSION_MAJOR EQUAL 16 ) AND ( HDK_VERSION_MINOR EQUAL 5 )))
+IF (( HDK_VERSION_MAJOR GREATER 16 ) OR (( HDK_VERSION_MAJOR EQUAL 16 ) AND ( HDK_VERSION_MINOR EQUAL 5 )))
 
   FIND_PACKAGE ( Boost ${MINIMUM_BOOST_VERSION} REQUIRED )
   INCLUDE_DIRECTORIES ( SYSTEM ${Boost_INCLUDE_DIR} )
@@ -91,9 +91,20 @@ INCLUDE_DIRECTORIES (
   )
 
 INCLUDE_DIRECTORIES ( SYSTEM ${HDK_INCLUDE_DIR} )
-# MESSAGE ( "HDK_DEFINITIONS = ${HDK_DEFINITIONS}" )
 
-LINK_DIRECTORIES($ENV{HFS}/dsolib)
+IF (WIN32)
+    # FILE(GLOB HOUDINI_SHARED_LIBS RELATIVE $ENV{HFS}/custom/houdini/dsolib $ENV{HFS}/custom/houdini/dsolib/*.lib)
+    # LIST(REMOVE_ITEM HOUDINI_SHARED_LIBS "libHARC32.lib")
+    # LIST(REMOVE_ITEM HOUDINI_SHARED_LIBS "libpng13d.lib")
+    # LIST(REMOVE_ITEM HOUDINI_SHARED_LIBS "openvdb_sesi.lib")
+    SET(HOUDINI_SHARED_LIBS "libPRM.lib" "libGEO.lib" "libUT.lib" "libOP.lib" "libOP3D.lib" "libGA.lib" "libGU.lib")
+    LINK_DIRECTORIES($ENV{HFS}/custom/houdini/dsolib)
+ELSE ()
+  SET ( HOUDINI_SHARED_LIBS "HoudiniPRM" "HoudiniGEO" "HoudiniUT" "HoudiniOP2" "HoudiniOP3" )
+  LINK_DIRECTORIES($ENV{HFS}/dsolib)
+ENDIF ()
+
+
 
 IF (NOT WIN32)
   ADD_DEFINITIONS ( -pthread -fPIC )
@@ -121,7 +132,7 @@ IF ( OPENVDB_ENABLE_RPATH )
 
 ENDIF ( OPENVDB_ENABLE_RPATH )
 
-ADD_LIBRARY ( openvdb_houdini SHARED
+SET ( OPENVDB_HOUDINI_LIBRARY_SOURCE_FILES
   houdini/GeometryUtil.cc
   houdini/GEO_PrimVDB.cc
   houdini/GT_GEOPrimCollectVDB.cc
@@ -135,13 +146,18 @@ ADD_LIBRARY ( openvdb_houdini SHARED
   houdini/Utils.cc
   )
 
+SET_SOURCE_FILES_PROPERTIES ( ${OPENVDB_HOUDINI_LIBRARY_SOURCE_FILES}
+  PROPERTIES
+  COMPILE_FLAGS "-DOPENVDB_HOUDINI_PRIVATE ${OPENVDB_USE_BLOSC_FLAG} ${OPENVDB_USE_GLFW_FLAG} ${OPENVDB_USE_TBB_FLAG}"
+  )
+
+ADD_LIBRARY ( openvdb_houdini SHARED
+  ${OPENVDB_HOUDINI_LIBRARY_SOURCE_FILES}
+  )
+
 TARGET_LINK_LIBRARIES ( openvdb_houdini
   ${OPENVDB_SHARED_LIB}
-  HoudiniPRM
-  HoudiniGEO
-  HoudiniUT
-  HoudiniOP2
-  HoudiniOP3
+  ${HOUDINI_SHARED_LIBS}
   )
 
 SET_TARGET_PROPERTIES(

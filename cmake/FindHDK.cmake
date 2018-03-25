@@ -228,8 +228,11 @@ IF (HDK_FOUND)
   ENDIF (WIN32)
 
   IF (WIN32)
-    FILE ( GLOB DSOLIB_A $ENV{HFS}/custom/houdini/dsolib/*.a )
-    FILE ( GLOB DSOLIB_LIB $ENV{HFS}/custom/houdini/dsolib/*.lib )
+    FILE ( GLOB DSOLIB_A RELATIVE $ENV{HFS}/custom/houdini/dsolib $ENV{HFS}/custom/houdini/dsolib/*.a )
+    FILE ( GLOB DSOLIB_LIB RELATIVE $ENV{HFS}/custom/houdini/dsolib $ENV{HFS}/custom/houdini/dsolib/*.lib )
+    LINK_DIRECTORIES($ENV{HFS}/custom/houdini/dsolib)
+    # MESSAGE ( "ENV{HDSO} = $ENV{HDSO} ")
+    # MESSAGE ( "DSOLIB_LIB = ${DSOLIB_LIB} ")
 	#ELSEIF (APPLE)
     # FILE ( GLOB DSOLIB_DYLIB $ENV{HFS}/../Libraries/*.dylib )
   ELSE (WIN32)
@@ -238,12 +241,8 @@ IF (HDK_FOUND)
     # LINK_DIRECTORIES ( $ENV{HFS}/dsolib ) 
   ENDIF (WIN32)
 
-  IF (APPLE)
-    SET ( HDK_LIBRARY_TYPE SHARED )
-  ELSE (APPLE)
-    SET ( HDK_LIBRARY_TYPE SHARED )
-  ENDIF (APPLE)
-
+  SET ( HDK_LIBRARY_TYPE SHARED )
+  
   FUNCTION ( HDK_CREATE_SESITAG
       # _input_name
       _src_name )
@@ -375,10 +374,6 @@ IF (HDK_FOUND)
 		${DSOLIB_A}
         ${DSOLIB_LIB}
 		)
-      #TARGET_LINK_LIBRARIES ( ${_lib_NAME}
-      #  ${DSOLIB_A}
-      #  ${DSOLIB_LIB}
-      #  )
     ELSE()
       # Linux
       SET_TARGET_PROPERTIES ( ${_lib_NAME} PROPERTIES
