@@ -44,11 +44,11 @@
 #include <openvdb/math/Mat4.h>
 #include <openvdb/math/Coord.h>
 #include <assert.h>
+#include <list>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <type_traits>
-#include <vector>
 #if OPENVDB_ABI_VERSION_NUMBER <= 3
 #include <boost/shared_ptr.hpp>
 #include <boost/weak_ptr.hpp>
@@ -389,7 +389,7 @@ private:
     {
     public:
         using Type = Combinable<T>;
-        using ContainerType = typename std::vector<T>;
+        using ContainerType = typename std::list<T>;
         using MutexType = std::mutex;
         
         Combinable() { createLocal(); }
@@ -478,7 +478,7 @@ private:
         {
             std::lock_guard<MutexType> lock(sAllLocalsMutex);
             
-            sAllLocals.emplace_back(val);
+            sAllLocals.push_back(val);
             mLocal = &sAllLocals.back();
         }
         
@@ -491,7 +491,7 @@ private:
     std::mutex Combinable<T>::sAllLocalsMutex;
     
     template<typename T>
-    std::vector<T> Combinable<T>::sAllLocals;
+    std::list<T> Combinable<T>::sAllLocals;
     
     template<typename T>
     thread_local T* Combinable<T>::mLocal(nullptr);

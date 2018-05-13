@@ -605,7 +605,7 @@ public:
     ///          elements are copied, i.e. size = 0.
     ValueBuffer(const ValueBuffer& other) : mParent(other.mParent), mPage(new Page()), mSize(0) {}
     /// @brief Destructor that transfers an buffered values to the parent PagedArray.
-    ~ValueBuffer() { mParent->add(mPage, mSize); delete mPage; }
+    ~ValueBuffer() { if (mParent) mParent->add(mPage, mSize); delete mPage; }
 
     ValueBuffer& operator=(const ValueBuffer&) = delete;// disallow copy assignment
 
@@ -623,7 +623,7 @@ public:
     /// push_back so it should only be called if one manually wants to
     /// sync up the buffer with the array, e.g. during debugging.
     void flush() {
-        mParent->add(mPage, mSize);
+		if (mParent) mParent->add(mPage, mSize);
         if (mPage == nullptr) mPage = new Page();
         mSize = 0;
     }
