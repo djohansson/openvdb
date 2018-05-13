@@ -300,7 +300,7 @@ TestAttributeArray::testRegistry()
 	
     { // cannot re-register an already registered AttributeArray
         CPPUNIT_ASSERT(AttributeArray::isRegistered(AttributeF::attributeType()));
-		auto factory2 = [](Index, Index, bool) { return AttributeArray::Ptr(); };
+		auto factory2 = [](Index, Index, bool) {  std::this_thread::sleep_for(std::chrono::milliseconds(1)); return AttributeArray::Ptr(); };
 		CPPUNIT_ASSERT_THROW(AttributeArray::registerType(AttributeF::attributeType(), factory2), KeyError);
     }
 
