@@ -81,9 +81,10 @@ template<
     typename PositionArrayT,
     typename PointIndexGridT>
 inline typename PointDataGridT::Ptr
-createPointDataGrid(
-    const PointIndexGridT& pointIndexGrid, const PositionArrayT& positions,
-    const math::Transform& xform, Metadata::Ptr positionDefaultValue = Metadata::Ptr());
+createPointDataGrid(const PointIndexGridT& pointIndexGrid,
+                    const PositionArrayT& positions,
+                    const math::Transform& xform,
+                    Metadata::Ptr positionDefaultValue = Metadata::Ptr());
 
 
 /// @brief  Convenience method to create a @c PointDataGrid from a std::vector of
@@ -98,7 +99,8 @@ createPointDataGrid(
 
 template <typename CompressionT, typename PointDataGridT, typename ValueT>
 inline typename PointDataGridT::Ptr
-createPointDataGrid(const std::vector<ValueT>& positions, const math::Transform& xform,
+createPointDataGrid(const std::vector<ValueT>& positions,
+                    const math::Transform& xform,
                     Metadata::Ptr positionDefaultValue = Metadata::Ptr());
 
 
@@ -115,9 +117,12 @@ createPointDataGrid(const std::vector<ValueT>& positions, const math::Transform&
 ///         operation. This is required to ensure the same point index ordering.
 template <typename PointDataTreeT, typename PointIndexTreeT, typename PointArrayT>
 inline void
-populateAttribute(  PointDataTreeT& tree, const PointIndexTreeT& pointIndexTree,
-                    const openvdb::Name& attributeName, const PointArrayT& data,
-                    const Index stride = 1, const bool insertMetadata = true);
+populateAttribute(  PointDataTreeT& tree,
+                    const PointIndexTreeT& pointIndexTree,
+                    const openvdb::Name& attributeName,
+                    const PointArrayT& data,
+                    const Index stride = 1,
+                    const bool insertMetadata = true);
 
 /// @brief Convert the position attribute from a Point Data Grid
 ///
@@ -125,19 +130,17 @@ populateAttribute(  PointDataTreeT& tree, const PointIndexTreeT& pointIndexTree,
 /// @param grid                 the PointDataGrid to be converted.
 /// @param pointOffsets         a vector of cumulative point offsets for each leaf
 /// @param startOffset          a value to shift all the point offsets by
-/// @param includeGroups        a vector of VDB Points groups to be included (default is all)
-/// @param excludeGroups        a vector of VDB Points groups to be excluded (default is none)
+/// @param filter               an index filter
 /// @param inCoreOnly           true if out-of-core leaf nodes are to be ignored
 ///
 
-template <typename PositionAttribute, typename PointDataGridT>
+template <typename PositionAttribute, typename PointDataGridT, typename FilterT = NullFilter>
 inline void
 convertPointDataGridPosition(   PositionAttribute& positionAttribute,
                                 const PointDataGridT& grid,
                                 const std::vector<Index64>& pointOffsets,
                                 const Index64 startOffset,
-                                const std::vector<Name>& includeGroups = std::vector<Name>(),
-                                const std::vector<Name>& excludeGroups = std::vector<Name>(),
+                                const FilterT& filter = NullFilter(),
                                 const bool inCoreOnly = false);
 
 
@@ -149,10 +152,9 @@ convertPointDataGridPosition(   PositionAttribute& positionAttribute,
 /// @param startOffset          a value to shift all the point offsets by
 /// @param arrayIndex           the index in the Descriptor of the array to be converted.
 /// @param stride               the stride of the attribute
-/// @param includeGroups        a vector of VDB Points groups to be included (default is all)
-/// @param excludeGroups        a vector of VDB Points groups to be excluded (default is none)
+/// @param filter               an index filter
 /// @param inCoreOnly           true if out-of-core leaf nodes are to be ignored
-template <typename TypedAttribute, typename PointDataTreeT>
+template <typename TypedAttribute, typename PointDataTreeT, typename FilterT = NullFilter>
 inline void
 convertPointDataGridAttribute(  TypedAttribute& attribute,
                                 const PointDataTreeT& tree,
@@ -160,8 +162,7 @@ convertPointDataGridAttribute(  TypedAttribute& attribute,
                                 const Index64 startOffset,
                                 const unsigned arrayIndex,
                                 const Index stride = 1,
-                                const std::vector<Name>& includeGroups = std::vector<Name>(),
-                                const std::vector<Name>& excludeGroups = std::vector<Name>(),
+                                const FilterT& filter = NullFilter(),
                                 const bool inCoreOnly = false);
 
 
@@ -172,20 +173,18 @@ convertPointDataGridAttribute(  TypedAttribute& attribute,
 /// @param pointOffsets         a vector of cumulative point offsets for each leaf
 /// @param startOffset          a value to shift all the point offsets by
 /// @param index                the group index to be converted.
-/// @param includeGroups        a vector of VDB Points groups to be included (default is all)
-/// @param excludeGroups        a vector of VDB Points groups to be excluded (default is none)
+/// @param filter               an index filter
 /// @param inCoreOnly           true if out-of-core leaf nodes are to be ignored
 ///
 
-template <typename Group, typename PointDataTreeT>
+template <typename Group, typename PointDataTreeT, typename FilterT = NullFilter>
 inline void
 convertPointDataGridGroup(  Group& group,
                             const PointDataTreeT& tree,
                             const std::vector<Index64>& pointOffsets,
                             const Index64 startOffset,
                             const AttributeSet::Descriptor::GroupIndex index,
-                            const std::vector<Name>& includeGroups = std::vector<Name>(),
-                            const std::vector<Name>& excludeGroups = std::vector<Name>(),
+                            const FilterT& filter = NullFilter(),
                             const bool inCoreOnly = false);
 
 /// @ brief Given a container of world space positions and a target points per voxel,
@@ -441,11 +440,13 @@ struct PopulateAttributeOp {
     const Index                 mStride;
 };
 
-template<typename PointDataTreeType, typename Attribute>
+template<typename PointDataTreeType, typename Attribute, typename FilterT>
 struct ConvertPointDataGridPositionOp {
 
     using LeafNode      = typename PointDataTreeType::LeafNodeType;
     using ValueType     = typename Attribute::ValueType;
+    using HandleT       = typename Attribute::Handle;
+    using SourceHandleT = AttributeHandle<ValueType>;
     using LeafManagerT  = typename tree::LeafManager<const PointDataTreeType>;
     using LeafRangeT    = typename LeafManagerT::LeafRange;
 
@@ -454,16 +455,14 @@ struct ConvertPointDataGridPositionOp {
                                     const Index64 startOffset,
                                     const math::Transform& transform,
                                     const size_t index,
-                                    const std::vector<Name>& includeGroups = std::vector<Name>(),
-                                    const std::vector<Name>& excludeGroups = std::vector<Name>(),
-                                    const bool inCoreOnly = false)
+                                    const FilterT& filter,
+                                    const bool inCoreOnly)
         : mAttribute(attribute)
         , mPointOffsets(pointOffsets)
         , mStartOffset(startOffset)
         , mTransform(transform)
         , mIndex(index)
-        , mIncludeGroups(includeGroups)
-        , mExcludeGroups(excludeGroups)
+        , mFilter(filter)
         , mInCoreOnly(inCoreOnly)
     {
         // only accept Vec3f as ValueType
@@ -472,11 +471,21 @@ struct ConvertPointDataGridPositionOp {
                       "ValueType is not Vec3f");
     }
 
-    void operator()(const LeafRangeT& range) const {
+    template <typename IterT>
+    void convert(IterT& iter, HandleT& targetHandle,
+        SourceHandleT& sourceHandle, Index64& offset) const
+    {
+        for (; iter; ++iter) {
+            const Vec3d xyz = iter.getCoord().asVec3d();
+            const Vec3d pos = sourceHandle.get(*iter);
+            targetHandle.set(static_cast<Index>(offset++), /*stride=*/0,
+                mTransform.indexToWorld(pos + xyz));
+        }
+    }
 
-        const bool useGroups = !mIncludeGroups.empty() || !mExcludeGroups.empty();
-
-        typename Attribute::Handle pHandle(mAttribute);
+    void operator()(const LeafRangeT& range) const
+    {
+        HandleT pHandle(mAttribute);
 
         for (auto leaf = range.begin(); leaf; ++leaf) {
 
@@ -488,27 +497,15 @@ struct ConvertPointDataGridPositionOp {
 
             if (leaf.pos() > 0) offset += mPointOffsets[leaf.pos() - 1];
 
-            auto handle = AttributeHandle<ValueType>::create(leaf->constAttributeArray(mIndex));
+            auto handle = SourceHandleT::create(leaf->constAttributeArray(mIndex));
 
-            if (useGroups) {
-                auto iter = leaf->beginIndexOn(MultiGroupFilter(mIncludeGroups, mExcludeGroups, leaf->attributeSet()));
-
-                for (; iter; ++iter) {
-                    const Vec3d xyz = iter.getCoord().asVec3d();
-                    const Vec3d pos = handle->get(*iter);
-                    pHandle.set(static_cast<Index>(offset++), /*stride=*/0,
-                        mTransform.indexToWorld(pos + xyz));
-                }
+            if (mFilter.state() == index::ALL) {
+                auto iter = leaf->beginIndexOn();
+                convert(iter, pHandle, *handle, offset);
             }
             else {
-                auto iter = leaf->beginIndexOn();
-
-                for (; iter; ++iter) {
-                    const Vec3d xyz = iter.getCoord().asVec3d();
-                    const Vec3d pos = handle->get(*iter);
-                    pHandle.set(static_cast<Index>(offset++), /*stride=*/0,
-                        mTransform.indexToWorld(pos + xyz));
-                }
+                auto iter = leaf->beginIndexOn(mFilter);
+                convert(iter, pHandle, *handle, offset);
             }
         }
     }
@@ -520,18 +517,18 @@ struct ConvertPointDataGridPositionOp {
     const Index64                           mStartOffset;
     const math::Transform&                  mTransform;
     const size_t                            mIndex;
-    const std::vector<std::string>&         mIncludeGroups;
-    const std::vector<std::string>&         mExcludeGroups;
+    const FilterT&                          mFilter;
     const bool                              mInCoreOnly;
 }; // ConvertPointDataGridPositionOp
 
 
-template<typename PointDataTreeType, typename Attribute>
+template<typename PointDataTreeType, typename Attribute, typename FilterT>
 struct ConvertPointDataGridAttributeOp {
 
     using LeafNode      = typename PointDataTreeType::LeafNodeType;
     using ValueType     = typename Attribute::ValueType;
-    using HandleT       = typename ConversionTraits<ValueType>::Handle;
+    using HandleT       = typename Attribute::Handle;
+    using SourceHandleT = typename ConversionTraits<ValueType>::Handle;
     using LeafManagerT  = typename tree::LeafManager<const PointDataTreeType>;
     using LeafRangeT    = typename LeafManagerT::LeafRange;
 
@@ -539,24 +536,44 @@ struct ConvertPointDataGridAttributeOp {
                                     const std::vector<Index64>& pointOffsets,
                                     const Index64 startOffset,
                                     const size_t index,
-                                    const Index stride = 1,
-                                    const std::vector<Name>& includeGroups = std::vector<Name>(),
-                                    const std::vector<Name>& excludeGroups = std::vector<Name>(),
-                                    const bool inCoreOnly = false)
+                                    const Index stride,
+                                    const FilterT& filter,
+                                    const bool inCoreOnly)
         : mAttribute(attribute)
         , mPointOffsets(pointOffsets)
         , mStartOffset(startOffset)
         , mIndex(index)
         , mStride(stride)
-        , mIncludeGroups(includeGroups)
-        , mExcludeGroups(excludeGroups)
+        , mFilter(filter)
         , mInCoreOnly(inCoreOnly) { }
 
-    void operator()(const LeafRangeT& range) const {
+    template <typename IterT>
+    void convert(IterT& iter, HandleT& targetHandle,
+        SourceHandleT& sourceHandle, Index64& offset) const
+    {
+        if (sourceHandle.isUniform()) {
+            const ValueType uniformValue(sourceHandle.get(0));
+            for (; iter; ++iter) {
+                for (Index i = 0; i < mStride; i++) {
+                    targetHandle.set(static_cast<Index>(offset), i, uniformValue);
+                }
+                offset++;
+            }
+        }
+        else {
+            for (; iter; ++iter) {
+                for (Index i = 0; i < mStride; i++) {
+                    targetHandle.set(static_cast<Index>(offset), i,
+                        sourceHandle.get(*iter, /*stride=*/i));
+                }
+                offset++;
+            }
+        }
+    }
 
-        const bool useGroups = !mIncludeGroups.empty() || !mExcludeGroups.empty();
-
-        typename Attribute::Handle pHandle(mAttribute);
+    void operator()(const LeafRangeT& range) const
+    {
+        HandleT pHandle(mAttribute);
 
         for (auto leaf = range.begin(); leaf; ++leaf) {
 
@@ -568,54 +585,15 @@ struct ConvertPointDataGridAttributeOp {
 
             if (leaf.pos() > 0) offset += mPointOffsets[leaf.pos() - 1];
 
-            typename HandleT::Ptr handle = ConversionTraits<ValueType>::handleFromLeaf(
+            typename SourceHandleT::Ptr handle = ConversionTraits<ValueType>::handleFromLeaf(
                 *leaf, static_cast<Index>(mIndex));
 
-            const bool uniform = handle->isUniform();
-
-            ValueType uniformValue = ConversionTraits<ValueType>::zero();
-            if (uniform)    uniformValue = ValueType(handle->get(0));
-
-            if (useGroups) {
-                auto iter = leaf->beginIndexOn(MultiGroupFilter(mIncludeGroups, mExcludeGroups, leaf->attributeSet()));
-
-                if (uniform) {
-                    for (; iter; ++iter) {
-                        for (Index i = 0; i < mStride; i++) {
-                            pHandle.set(static_cast<Index>(offset), i, uniformValue);
-                        }
-                        offset++;
-                    }
-                }
-                else {
-                    for (; iter; ++iter) {
-                        for (Index i = 0; i < mStride; i++) {
-                            pHandle.set(static_cast<Index>(offset), i, handle->get(*iter));
-                        }
-                        offset++;
-                    }
-                }
-            }
-            else {
+            if (mFilter.state() == index::ALL) {
                 auto iter = leaf->beginIndexOn();
-
-                if (uniform) {
-                    for (; iter; ++iter) {
-                        for (Index i = 0; i < mStride; i++) {
-                            pHandle.set(static_cast<Index>(offset), i, uniformValue);
-                        }
-                        offset++;
-                    }
-                }
-                else {
-                    for (; iter; ++iter) {
-                        for (Index i = 0; i < mStride; i++) {
-                            pHandle.set(static_cast<Index>(offset), i,
-                                handle->get(*iter, /*stride=*/i));
-                        }
-                        offset++;
-                    }
-                }
+                convert(iter, pHandle, *handle, offset);
+            } else {
+                auto iter = leaf->beginIndexOn(mFilter);
+                convert(iter, pHandle, *handle, offset);
             }
         }
     }
@@ -627,12 +605,11 @@ struct ConvertPointDataGridAttributeOp {
     const Index64                           mStartOffset;
     const size_t                            mIndex;
     const Index                             mStride;
-    const std::vector<std::string>&         mIncludeGroups;
-    const std::vector<std::string>&         mExcludeGroups;
+    const FilterT&                          mFilter;
     const bool                              mInCoreOnly;
 }; // ConvertPointDataGridAttributeOp
 
-template<typename PointDataTreeType, typename Group>
+template<typename PointDataTreeType, typename Group, typename FilterT>
 struct ConvertPointDataGridGroupOp {
 
     using LeafNode      = typename PointDataTreeType::LeafNodeType;
@@ -644,21 +621,40 @@ struct ConvertPointDataGridGroupOp {
                                 const std::vector<Index64>& pointOffsets,
                                 const Index64 startOffset,
                                 const AttributeSet::Descriptor::GroupIndex index,
-                                const std::vector<Name>& includeGroups = std::vector<Name>(),
-                                const std::vector<Name>& excludeGroups = std::vector<Name>(),
-                                const bool inCoreOnly = false)
+                                const FilterT& filter,
+                                const bool inCoreOnly)
         : mGroup(group)
         , mPointOffsets(pointOffsets)
         , mStartOffset(startOffset)
         , mIndex(index)
-        , mIncludeGroups(includeGroups)
-        , mExcludeGroups(excludeGroups)
+        , mFilter(filter)
         , mInCoreOnly(inCoreOnly) { }
 
-    void operator()(const LeafRangeT& range) const {
+    template <typename IterT>
+    void convert(IterT& iter, const GroupAttributeArray& groupArray, Index64& offset) const
+    {
+        const auto bitmask = static_cast<GroupType>(1 << mIndex.second);
 
-        const bool useGroups = !mIncludeGroups.empty() || !mExcludeGroups.empty();
+        if (groupArray.isUniform()) {
+            if (groupArray.get(0) & bitmask) {
+                for (; iter; ++iter) {
+                    mGroup.setOffsetOn(static_cast<Index>(offset));
+                    offset++;
+                }
+            }
+        }
+        else {
+            for (; iter; ++iter) {
+                if (groupArray.get(*iter) & bitmask) {
+                    mGroup.setOffsetOn(static_cast<Index>(offset));
+                }
+                offset++;
+            }
+        }
+    }
 
+    void operator()(const LeafRangeT& range) const
+    {
         for (auto leaf = range.begin(); leaf; ++leaf) {
 
             assert(leaf.pos() < mPointOffsets.size());
@@ -670,53 +666,16 @@ struct ConvertPointDataGridGroupOp {
             if (leaf.pos() > 0)     offset += mPointOffsets[leaf.pos() - 1];
 
             const AttributeArray& array = leaf->constAttributeArray(mIndex.first);
-            const auto bitmask = static_cast<GroupType>(1 << mIndex.second);
-
             assert(isGroup(array));
-
             const GroupAttributeArray& groupArray = GroupAttributeArray::cast(array);
 
-            const bool uniform = groupArray.isUniform();
-
-            if (uniform) {
-                if (!(groupArray.get(0) & bitmask))     continue;
-            }
-
-            if (useGroups) {
-                auto iter = leaf->beginIndexOn(MultiGroupFilter(mIncludeGroups, mExcludeGroups, leaf->attributeSet()));
-
-                if (uniform) {
-                    for (; iter; ++iter) {
-                        mGroup.setOffsetOn(static_cast<Index>(offset));
-                        offset++;
-                    }
-                }
-                else {
-                    for (; iter; ++iter) {
-                        if (groupArray.get(*iter) & bitmask) {
-                            mGroup.setOffsetOn(static_cast<Index>(offset));
-                        }
-                        offset++;
-                    }
-                }
+            if (mFilter.state() == index::ALL) {
+                auto iter = leaf->beginIndexOn();
+                convert(iter, groupArray, offset);
             }
             else {
-                auto iter = leaf->beginIndexOn();
-
-                if (uniform) {
-                    for (; iter; ++iter) {
-                        mGroup.setOffsetOn(static_cast<Index>(offset));
-                        offset++;
-                    }
-                }
-                else {
-                    for (; iter; ++iter) {
-                        if (groupArray.get(*iter) & bitmask) {
-                            mGroup.setOffsetOn(static_cast<Index>(offset));
-                        }
-                        offset++;
-                    }
-                }
+                auto iter = leaf->beginIndexOn(mFilter);
+                convert(iter, groupArray, offset);
             }
         }
     }
@@ -727,8 +686,7 @@ struct ConvertPointDataGridGroupOp {
     const std::vector<Index64>&             mPointOffsets;
     const Index64                           mStartOffset;
     const GroupIndex                        mIndex;
-    const std::vector<std::string>&         mIncludeGroups;
-    const std::vector<std::string>&         mExcludeGroups;
+    const FilterT&                          mFilter;
     const bool                              mInCoreOnly;
 }; // ConvertPointDataGridGroupOp
 
@@ -890,14 +848,13 @@ populateAttribute(PointDataTreeT& tree, const PointIndexTreeT& pointIndexTree,
 ////////////////////////////////////////
 
 
-template <typename PositionAttribute, typename PointDataGridT>
+template <typename PositionAttribute, typename PointDataGridT, typename FilterT>
 inline void
 convertPointDataGridPosition(   PositionAttribute& positionAttribute,
                                 const PointDataGridT& grid,
                                 const std::vector<Index64>& pointOffsets,
                                 const Index64 startOffset,
-                                const std::vector<Name>& includeGroups,
-                                const std::vector<Name>& excludeGroups,
+                                const FilterT& filter,
                                 const bool inCoreOnly)
 {
     using TreeType      = typename PointDataGridT::TreeType;
@@ -910,26 +867,14 @@ convertPointDataGridPosition(   PositionAttribute& positionAttribute,
 
     if (!iter)  return;
 
-    // for efficiency, keep only groups that are present in the Descriptor
-
-    const AttributeSet::Descriptor& descriptor = iter->attributeSet().descriptor();
-
-    std::vector<Name> newIncludeGroups(includeGroups);
-    std::vector<Name> newExcludeGroups(excludeGroups);
-
-    deleteMissingPointGroups(newIncludeGroups, descriptor);
-    deleteMissingPointGroups(newExcludeGroups, descriptor);
-
-    LeafManagerT leafManager(tree);
-
     const size_t positionIndex = iter->attributeSet().find("P");
 
     positionAttribute.expand();
-    ConvertPointDataGridPositionOp<TreeType, PositionAttribute> convert(
+    LeafManagerT leafManager(tree);
+    ConvertPointDataGridPositionOp<TreeType, PositionAttribute, FilterT> convert(
                     positionAttribute, pointOffsets, startOffset, grid.transform(), positionIndex,
-                    newIncludeGroups, newExcludeGroups, inCoreOnly);
+                    filter, inCoreOnly);
 	OPENVDB_FOR_EACH(convert, leafManager.leafRange());
-
     positionAttribute.compact();
 }
 
@@ -937,7 +882,7 @@ convertPointDataGridPosition(   PositionAttribute& positionAttribute,
 ////////////////////////////////////////
 
 
-template <typename TypedAttribute, typename PointDataTreeT>
+template <typename TypedAttribute, typename PointDataTreeT, typename FilterT>
 inline void
 convertPointDataGridAttribute(  TypedAttribute& attribute,
                                 const PointDataTreeT& tree,
@@ -945,8 +890,7 @@ convertPointDataGridAttribute(  TypedAttribute& attribute,
                                 const Index64 startOffset,
                                 const unsigned arrayIndex,
                                 const Index stride,
-                                const std::vector<Name>& includeGroups,
-                                const std::vector<Name>& excludeGroups,
+                                const FilterT& filter,
                                 const bool inCoreOnly)
 {
     using LeafManagerT = typename tree::LeafManager<const PointDataTreeT>;
@@ -957,24 +901,12 @@ convertPointDataGridAttribute(  TypedAttribute& attribute,
 
     if (!iter)  return;
 
-    // for efficiency, keep only groups that are present in the Descriptor
-
-    const AttributeSet::Descriptor& descriptor = iter->attributeSet().descriptor();
-
-    std::vector<Name> newIncludeGroups(includeGroups);
-    std::vector<Name> newExcludeGroups(excludeGroups);
-
-    deleteMissingPointGroups(newIncludeGroups, descriptor);
-    deleteMissingPointGroups(newExcludeGroups, descriptor);
-
-    LeafManagerT leafManager(tree);
-
     attribute.expand();
-    ConvertPointDataGridAttributeOp<PointDataTreeT, TypedAttribute> convert(
+    LeafManagerT leafManager(tree);
+    ConvertPointDataGridAttributeOp<PointDataTreeT, TypedAttribute, FilterT> convert(
                         attribute, pointOffsets, startOffset, arrayIndex, stride,
-                        newIncludeGroups, newExcludeGroups, inCoreOnly);
+                        filter, inCoreOnly);
 	OPENVDB_FOR_EACH(convert, leafManager.leafRange());
-
     attribute.compact();
 }
 
@@ -982,15 +914,14 @@ convertPointDataGridAttribute(  TypedAttribute& attribute,
 ////////////////////////////////////////
 
 
-template <typename Group, typename PointDataTreeT>
+template <typename Group, typename PointDataTreeT, typename FilterT>
 inline void
 convertPointDataGridGroup(  Group& group,
                             const PointDataTreeT& tree,
                             const std::vector<Index64>& pointOffsets,
                             const Index64 startOffset,
                             const AttributeSet::Descriptor::GroupIndex index,
-                            const std::vector<Name>& includeGroups,
-                            const std::vector<Name>& excludeGroups,
+                            const FilterT& filter,
                             const bool inCoreOnly)
 {
     using LeafManagerT= typename tree::LeafManager<const PointDataTreeT>;
@@ -998,24 +929,12 @@ convertPointDataGridGroup(  Group& group,
     using point_conversion_internal::ConvertPointDataGridGroupOp;
 
     auto iter = tree.cbeginLeaf();
-
     if (!iter)  return;
 
-    // for efficiency, keep only groups that are present in the Descriptor
-
-    const AttributeSet::Descriptor& descriptor = iter->attributeSet().descriptor();
-
-    std::vector<Name> newIncludeGroups(includeGroups);
-    std::vector<Name> newExcludeGroups(excludeGroups);
-
-    deleteMissingPointGroups(newIncludeGroups, descriptor);
-    deleteMissingPointGroups(newExcludeGroups, descriptor);
-
     LeafManagerT leafManager(tree);
-
-    ConvertPointDataGridGroupOp<PointDataTree, Group> convert(
+    ConvertPointDataGridGroupOp<PointDataTree, Group, FilterT> convert(
                     group, pointOffsets, startOffset, index,
-                    newIncludeGroups, newExcludeGroups, inCoreOnly);
+                    filter, inCoreOnly);
 	OPENVDB_FOR_EACH(convert, leafManager.leafRange());
 
     // must call this after modifying point groups in parallel
@@ -1189,6 +1108,72 @@ computeVoxelSize(  const PositionWrapper& positions,
     // truncate the voxel size for readability and return the value
 
     return Local::truncate(voxelSize, decimalPlaces);
+}
+
+
+////////////////////////////////////////
+
+
+// deprecated functions
+
+
+template <typename PositionAttribute, typename PointDataGridT>
+OPENVDB_DEPRECATED
+inline void
+convertPointDataGridPosition(   PositionAttribute& positionAttribute,
+                                const PointDataGridT& grid,
+                                const std::vector<Index64>& pointOffsets,
+                                const Index64 startOffset,
+                                const std::vector<Name>& includeGroups,
+                                const std::vector<Name>& excludeGroups,
+                                const bool inCoreOnly = false)
+{
+    auto leaf = grid.tree().cbeginLeaf();
+    if (!leaf)  return;
+    MultiGroupFilter filter(includeGroups, excludeGroups, leaf->attributeSet());
+    convertPointDataGridPosition(positionAttribute, grid, pointOffsets, startOffset,
+        filter, inCoreOnly);
+}
+
+
+template <typename TypedAttribute, typename PointDataTreeT>
+OPENVDB_DEPRECATED
+inline void
+convertPointDataGridAttribute(  TypedAttribute& attribute,
+                                const PointDataTreeT& tree,
+                                const std::vector<Index64>& pointOffsets,
+                                const Index64 startOffset,
+                                const unsigned arrayIndex,
+                                const Index stride,
+                                const std::vector<Name>& includeGroups,
+                                const std::vector<Name>& excludeGroups,
+                                const bool inCoreOnly = false)
+{
+    auto leaf = tree.cbeginLeaf();
+    if (!leaf)  return;
+    MultiGroupFilter filter(includeGroups, excludeGroups, leaf->attributeSet());
+    convertPointDataGridAttribute(attribute, tree, pointOffsets, startOffset,
+        arrayIndex, stride, filter, inCoreOnly);
+}
+
+
+template <typename Group, typename PointDataTreeT>
+OPENVDB_DEPRECATED
+inline void
+convertPointDataGridGroup(  Group& group,
+                            const PointDataTreeT& tree,
+                            const std::vector<Index64>& pointOffsets,
+                            const Index64 startOffset,
+                            const AttributeSet::Descriptor::GroupIndex index,
+                            const std::vector<Name>& includeGroups,
+                            const std::vector<Name>& excludeGroups,
+                            const bool inCoreOnly = false)
+{
+    auto leaf = tree.cbeginLeaf();
+    if (!leaf)  return;
+    MultiGroupFilter filter(includeGroups, excludeGroups, leaf->attributeSet());
+    convertPointDataGridGroup(group, tree, pointOffsets, startOffset,
+        index, filter, inCoreOnly);
 }
 
 

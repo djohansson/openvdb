@@ -54,33 +54,31 @@ namespace points {
 
 
 /// @brief Extract a Mask Grid from a Point Data Grid
-/// @param grid             the PointDataGrid to extract the mask from.
-/// @param includeGroups    a vector of VDB Points groups to be included (default is all).
-/// @param excludeGroups    a vector of VDB Points groups to be excluded (default is none).
+/// @param grid         the PointDataGrid to extract the mask from.
+/// @param filter       an optional index filter
 /// @note this method is only available for Bool Grids and Mask Grids
 template <typename PointDataGridT,
-          typename MaskT = typename PointDataGridT::template ValueConverter<bool>::Type>
+          typename MaskT = typename PointDataGridT::template ValueConverter<bool>::Type,
+          typename FilterT = NullFilter>
 inline typename std::enable_if<std::is_same<typename MaskT::ValueType, bool>::value,
     typename MaskT::Ptr>::type
 convertPointsToMask(const PointDataGridT& grid,
-                    const std::vector<Name>& includeGroups = std::vector<Name>(),
-                    const std::vector<Name>& excludeGroups = std::vector<Name>());
+                    const FilterT& filter = NullFilter());
 
 
 /// @brief Extract a Mask Grid from a Point Data Grid using a new transform
-/// @param grid             the PointDataGrid to extract the mask from.
-/// @param transform        target transform for the mask.
-/// @param includeGroups    a vector of VDB Points groups to be included (default is all).
-/// @param excludeGroups    a vector of VDB Points groups to be excluded (default is none).
+/// @param grid         the PointDataGrid to extract the mask from.
+/// @param transform    target transform for the mask.
+/// @param filter       an optional index filter
 /// @note this method is only available for Bool Grids and Mask Grids
 template <typename PointDataGridT,
-          typename MaskT = typename PointDataGridT::template ValueConverter<bool>::Type>
+          typename MaskT = typename PointDataGridT::template ValueConverter<bool>::Type,
+          typename FilterT = NullFilter>
 inline typename std::enable_if<std::is_same<typename MaskT::ValueType, bool>::value,
     typename MaskT::Ptr>::type
 convertPointsToMask(const PointDataGridT& grid,
                     const openvdb::math::Transform& transform,
-                    const std::vector<Name>& includeGroups = std::vector<Name>(),
-                    const std::vector<Name>& excludeGroups = std::vector<Name>());
+                    const FilterT& filter = NullFilter());
 
 
 ////////////////////////////////////////
@@ -134,8 +132,8 @@ struct PointsToScalarOp
     using LeafManagerT = typename tree::LeafManager<TreeT>;
     using ValueT = typename TreeT::LeafNodeType::ValueType;
 
-    PointsToScalarOp(const PointDataGridT& grid,
-                  const FilterT& filter)
+    PointsToScalarOp(   const PointDataGridT& grid,
+                        const FilterT& filter)
         : mPointDataAccessor(grid.getConstAccessor())
         , mFilter(filter) { }
 
@@ -215,11 +213,10 @@ private:
 }; // struct PointsToTransformedScalarOp
 
 
-template<typename PointDataGridT, typename GridT>
+template<typename PointDataGridT, typename GridT, typename FilterT>
 inline typename GridT::Ptr convertPointsToScalar(
     const PointDataGridT& points,
-    const std::vector<Name>& includeGroups,
-    const std::vector<Name>& excludeGroups)
+    const FilterT& filter)
 {
     using point_mask_internal::PointsToScalarOp;
 
@@ -237,27 +234,22 @@ inline typename GridT::Ptr convertPointsToScalar(
 
     if (points.constTree().leafCount() == 0)            return grid;
 
-    const bool useGroup = !includeGroups.empty() || !excludeGroups.empty();
-
     // early exit if mask and no group logic
 
-    if (std::is_same<ValueT, bool>::value && !useGroup) return grid;
+    if (std::is_same<ValueT, bool>::value && filter.state() == index::ALL) return grid;
 
     // evaluate point group filters to produce a subset of the generated mask
 
     tree::LeafManager<GridTreeT> leafManager(*tree);
 
-    if (useGroup) {
-        // build mask from points in parallel only where filter evaluates to true
-        const auto leaf = points.constTree().cbeginLeaf();
-        MultiGroupFilter filter(includeGroups, excludeGroups, leaf->attributeSet());
-        PointsToScalarOp<GridT, PointDataGridT, MultiGroupFilter> pointsToScalarOp(
-            points, filter);
-		OPENVDB_FOR_EACH(pointsToScalarOp, leafManager.leafRange());
-    }
-    else {
-        NullFilter filter;
+    if (filter.state() == index::ALL) {
+        NullFilter nullFilter;
         PointsToScalarOp<GridT, PointDataGridT, NullFilter> pointsToScalarOp(
+            points, nullFilter);
+		OPENVDB_FOR_EACH(pointsToScalarOp, leafManager.leafRange());
+    } else {
+        // build mask from points in parallel only where filter evaluates to true
+        PointsToScalarOp<GridT, PointDataGridT, FilterT> pointsToScalarOp(
             points, filter);
 		OPENVDB_FOR_EACH(pointsToScalarOp, leafManager.leafRange());
     }
@@ -266,12 +258,11 @@ inline typename GridT::Ptr convertPointsToScalar(
 }
 
 
-template<typename PointDataGridT, typename GridT>
+template<typename PointDataGridT, typename GridT, typename FilterT>
 inline typename GridT::Ptr convertPointsToScalar(
     const PointDataGridT& points,
     const openvdb::math::Transform& transform,
-    const std::vector<Name>& includeGroups,
-    const std::vector<Name>& excludeGroups)
+    const FilterT& filter)
 {
     using point_mask_internal::PointsToTransformedScalarOp;
     using point_mask_internal::GridCombinerOp;
@@ -285,7 +276,7 @@ inline typename GridT::Ptr convertPointsToScalar(
 
     if (transform == pointsTransform) {
         return convertPointsToScalar<PointDataGridT, GridT>(
-            points, includeGroups, excludeGroups);
+            points, filter);
     }
 
     typename GridT::Ptr grid = GridT::create();
@@ -301,18 +292,13 @@ inline typename GridT::Ptr convertPointsToScalar(
 
     tree::LeafManager<const typename PointDataGridT::TreeType> leafManager(points.tree());
 
-    const bool useGroup = !includeGroups.empty() || !excludeGroups.empty();
-
-    if (useGroup) {
-        const auto leaf = points.constTree().cbeginLeaf();
-        MultiGroupFilter filter(includeGroups, excludeGroups, leaf->attributeSet());
-        PointsToTransformedScalarOp<GridT, PointDataGridT, MultiGroupFilter> pointsToScalarOp(
-            transform, pointsTransform, filter, combiner);
-		OPENVDB_FOR_EACH(pointsToScalarOp, leafManager.leafRange());
-    }
-    else {
-        NullFilter filter;
+    if (filter.state() == index::ALL) {
+        NullFilter nullFilter;
         PointsToTransformedScalarOp<GridT, PointDataGridT, NullFilter> pointsToScalarOp(
+            transform, pointsTransform, nullFilter, combiner);
+		OPENVDB_FOR_EACH(pointsToScalarOp, leafManager.leafRange());
+    } else {
+        PointsToTransformedScalarOp<GridT, PointDataGridT, FilterT> pointsToScalarOp(
             transform, pointsTransform, filter, combiner);
 		OPENVDB_FOR_EACH(pointsToScalarOp, leafManager.leafRange());
     }
@@ -332,34 +318,68 @@ inline typename GridT::Ptr convertPointsToScalar(
 ////////////////////////////////////////
 
 
-template<typename PointDataGridT, typename MaskT>
+template<typename PointDataGridT, typename MaskT, typename FilterT>
 inline typename std::enable_if<std::is_same<typename MaskT::ValueType, bool>::value,
     typename MaskT::Ptr>::type
 convertPointsToMask(
     const PointDataGridT& points,
-    const std::vector<Name>& includeGroups,
-    const std::vector<Name>& excludeGroups)
+    const FilterT& filter)
 {
     return point_mask_internal::convertPointsToScalar<PointDataGridT, MaskT>(
-        points, includeGroups, excludeGroups);
+        points, filter);
 }
 
 
-template<typename PointDataGridT, typename MaskT>
+template<typename PointDataGridT, typename MaskT, typename FilterT>
 inline typename std::enable_if<std::is_same<typename MaskT::ValueType, bool>::value,
     typename MaskT::Ptr>::type
 convertPointsToMask(
     const PointDataGridT& points,
     const openvdb::math::Transform& transform,
-    const std::vector<Name>& includeGroups,
-    const std::vector<Name>& excludeGroups)
+    const FilterT& filter)
 {
     return point_mask_internal::convertPointsToScalar<PointDataGridT, MaskT>(
-        points, transform, includeGroups, excludeGroups);
+        points, transform, filter);
 }
 
 
 ////////////////////////////////////////
+
+
+// deprecated functions
+
+
+template <typename PointDataGridT,
+          typename MaskT = typename PointDataGridT::template ValueConverter<bool>::Type>
+OPENVDB_DEPRECATED
+inline typename std::enable_if<std::is_same<typename MaskT::ValueType, bool>::value,
+    typename MaskT::Ptr>::type
+convertPointsToMask(const PointDataGridT& grid,
+                    const std::vector<Name>& includeGroups,
+                    const std::vector<Name>& excludeGroups)
+{
+    auto leaf = grid.tree().cbeginLeaf();
+    if (!leaf)  return MaskT::create();
+    MultiGroupFilter filter(includeGroups, excludeGroups, leaf->attributeSet());
+    return convertPointsToMask(grid, filter);
+}
+
+
+template <typename PointDataGridT,
+          typename MaskT = typename PointDataGridT::template ValueConverter<bool>::Type>
+OPENVDB_DEPRECATED
+inline typename std::enable_if<std::is_same<typename MaskT::ValueType, bool>::value,
+    typename MaskT::Ptr>::type
+convertPointsToMask(const PointDataGridT& grid,
+                    const openvdb::math::Transform& transform,
+                    const std::vector<Name>& includeGroups,
+                    const std::vector<Name>& excludeGroups)
+{
+    auto leaf = grid.tree().cbeginLeaf();
+    if (!leaf)  return MaskT::create();
+    MultiGroupFilter filter(includeGroups, excludeGroups, leaf->attributeSet());
+    return convertPointsToMask(grid, transform, filter);
+}
 
 
 } // namespace points

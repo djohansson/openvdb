@@ -100,7 +100,7 @@ IF (WIN32)
     SET(HOUDINI_SHARED_LIBS "libCH.lib" "libGA.lib" "libGEO.lib" "libGT.lib" "libGU.lib" "libOBJ.lib" "libOP.lib" "libOP3D.lib" "libPRM.lib" "libSOP.lib" "libSYS.lib" "libUT.lib" "hboost_system-mt.lib")
     LINK_DIRECTORIES($ENV{HFS}/custom/houdini/dsolib)
 ELSE ()
-  SET ( HOUDINI_SHARED_LIBS "HoudiniPRM" "HoudiniGEO" "HoudiniUT" "HoudiniOP2" "HoudiniOP3" )
+  SET ( HOUDINI_SHARED_LIBS "HoudiniPRM" "HoudiniGEO" "HoudiniUT" "HoudiniOP2" "HoudiniOP3" "HoudiniAPPS3" )
   LINK_DIRECTORIES($ENV{HFS}/dsolib)
 ENDIF ()
 
@@ -134,7 +134,8 @@ IF ( USE_TBB )
 ENDIF ()
 
 SET ( OPENVDB_HFS_INSTALL_BASE_DIR
-  ${CMAKE_INSTALL_PREFIX}/houdini$<$<BOOL:${OPENVDB_HOUDINI_SUBDIR}>:/>${HDK_VERSION_MAJOR}.${HDK_VERSION_MINOR}$<$<NOT:$<BOOL:${OPENVDB_HOUDINI_SHORT_VERSION}>>:.${HDK_VERSION_BUILD}>
+  ${CMAKE_INSTALL_PREFIX}/houdini$<$<BOOL:${OPENVDB_HOUDINI_SUBDIR}>:/>${HDK_VERSION_MAJOR}.${HDK_VERSION_MINOR}$<$<NOT:$<BOOL:${OPENVDB_HOUDINI_SHORT_VERSION}>>:.${HDK_VERSION_BUILD}> 
+  CACHE PATH "Base install path for houdini"
   )
 
 # RPath handling

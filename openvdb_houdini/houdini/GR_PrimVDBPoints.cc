@@ -65,7 +65,6 @@
 #include <RE/RE_ShaderHandle.h>
 #include <RE/RE_VertexArray.h>
 #include <UT/UT_DSOVersion.h>
-#include <UT/UT_Version.h>
 
 #include <iostream>
 #include <limits>
@@ -244,25 +243,36 @@ OPENVDB_FINISH_THREADSAFE_STATIC_WRITE
 }
 
 
+static inline bool
+grIsPointDataGrid(const GT_PrimitiveHandle& gt_prim)
+{
+    if (gt_prim->getPrimitiveType() != GT_PRIM_VDB_VOLUME)
+	return false;
+
+    const GT_PrimVDB* gt_vdb = static_cast<const GT_PrimVDB*>(gt_prim.get());
+    const GEO_PrimVDB* gr_vdb = gt_vdb->getGeoPrimitive();
+
+#if (UT_VERSION_INT >= 0x10000258) // 16.0.600 or later
+    return (gr_vdb->getStorageType() == UT_VDB_POINTDATA);
+#else
+    return (gr_vdb->getGrid().isType<openvdb::points::PointDataGrid>());
+#endif
+}
+
+
 GR_Primitive*
 GUI_PrimVDBPointsHook::createPrimitive(
     const GT_PrimitiveHandle& gt_prim,
     const GEO_Primitive* geo_prim,
     const GR_RenderInfo* info,
     const char* cache_name,
-    GR_PrimAcceptResult&)
+    GR_PrimAcceptResult& processed)
 {
-    if (gt_prim->getPrimitiveType() != GT_PRIM_VDB_VOLUME) {
-        return nullptr;
-    }
-
-    const GT_PrimVDB* gtPrimVDB = static_cast<const GT_PrimVDB*>(gt_prim.get());
-    const GEO_PrimVDB* primVDB = gtPrimVDB->getGeoPrimitive();
-
-    if (primVDB->getGrid().isType<openvdb::points::PointDataGrid>()) {
+    if (grIsPointDataGrid(gt_prim)) {
+	processed = GR_PROCESSED;
         return new GR_PrimVDBPoints(info, cache_name, geo_prim);
     }
-
+    processed = GR_NOT_PROCESSED;
     return nullptr;
 }
 
@@ -445,13 +455,11 @@ GR_PrimVDBPoints::GR_PrimVDBPoints(
 GR_PrimAcceptResult
 GR_PrimVDBPoints::acceptPrimitive(GT_PrimitiveType,
                   int geo_type,
-                  const GT_PrimitiveHandle&,
+                  const GT_PrimitiveHandle& gt_prim,
                   const GEO_Primitive*)
 {
-    if (geo_type == GT_PRIM_VDB_VOLUME)
-    {
-        return GR_PROCESSED;
-    }
+    if (geo_type == GT_PRIM_VDB_VOLUME && grIsPointDataGrid(gt_prim))
+	return GR_PROCESSED;
 
     return GR_NOT_PROCESSED;
 }
@@ -870,9 +878,14 @@ GR_PrimVDBPoints::updatePosBuffer(RE_Render* r,
 
     // count up total points ignoring any leaf nodes that are out of core
 
-    int numPoints = static_cast<int>(useGroup ?
-        groupPointCount(tree, groupName, /*inCoreOnly=*/true) :
-        pointCount(tree, /*inCoreOnly=*/true));
+    int numPoints = 0;
+    if (useGroup) {
+        GroupFilter filter(groupName, iter->attributeSet());
+        numPoints = static_cast<int>(pointCount(tree, filter, /*inCoreOnly=*/true));
+    } else {
+        NullFilter filter;
+        numPoints = static_cast<int>(pointCount(tree, filter, /*inCoreOnly=*/true));
+    }
 
     if (numPoints == 0)    return;
 
@@ -906,16 +919,16 @@ GR_PrimVDBPoints::updatePosBuffer(RE_Render* r,
         std::vector<Name> excludeGroups;
         if (useGroup)   includeGroups.push_back(groupName);
 
-        std::vector<Index64> pointOffsets;
-        getPointOffsets(pointOffsets, grid.tree(),
-                        includeGroups, excludeGroups, /*inCoreOnly=*/true);
+        MultiGroupFilter filter(includeGroups, excludeGroups, iter->attributeSet());
+
+        std::vector<Index64> offsets;
+        pointOffsets(offsets, grid.tree(), filter, /*inCoreOnly=*/true);
 
         UT_UniquePtr<UT_Vector3H[]> pdata(new UT_Vector3H[numPoints]);
 
         PositionAttribute positionAttribute(pdata.get(), mCentroid, static_cast<Index>(stride));
-        convertPointDataGridPosition(positionAttribute, grid, pointOffsets,
-                                    /*startOffset=*/ 0, includeGroups, excludeGroups,
-                                    /*inCoreOnly=*/true);
+        convertPointDataGridPosition(positionAttribute, grid, offsets,
+                                    /*startOffset=*/ 0, filter, /*inCoreOnly=*/true);
 
         const int maxVertexSize = RE_OGLBuffer::getMaxVertexArraySize(r);
 
@@ -1177,14 +1190,16 @@ GR_PrimVDBPoints::updateVec3Buffer( RE_Render* r,
         std::vector<Name> excludeGroups;
         if (useGroup)   includeGroups.push_back(groupName);
 
-        std::vector<Index64> pointOffsets;
-        getPointOffsets(pointOffsets, grid.tree(), includeGroups, excludeGroups, /*inCoreOnly=*/true);
+        MultiGroupFilter filter(includeGroups, excludeGroups, iter->attributeSet());
+
+        std::vector<Index64> offsets;
+        pointOffsets(offsets, grid.tree(), filter, /*inCoreOnly=*/true);
 
         if (type == "vec3s") {
             VectorAttribute<Vec3f> typedAttribute(data.get());
-            convertPointDataGridAttribute(typedAttribute, grid.tree(), pointOffsets,
+            convertPointDataGridAttribute(typedAttribute, grid.tree(), offsets,
                 /*startOffset=*/ 0, static_cast<unsigned>(index), /*stride=*/1,
-                includeGroups, excludeGroups, /*inCoreOnly=*/true);
+                filter, /*inCoreOnly=*/true);
         }
 
         const int maxVertexSize = RE_OGLBuffer::getMaxVertexArraySize(r);
@@ -1284,7 +1299,7 @@ GR_PrimVDBPoints::render(RE_Render *r, GR_RenderMode, GR_RenderFlags,
 
     // draw leaf bboxes
 
-    if (myWire) {
+    if (myWire && myWire->getNumPoints() > 0) {
 
         // bind the shader
 
