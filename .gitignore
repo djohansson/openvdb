@@ -4,3 +4,4 @@ openvdb/python/.pytest_cache/
 openvdb/python/test/__pycache__/
 build_houdini/
 *.bat
+*.o
