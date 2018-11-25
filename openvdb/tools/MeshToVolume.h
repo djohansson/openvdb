@@ -2052,11 +2052,13 @@ private:
         enum { POLYGON_LIMIT = 1000 };
 
         SubTask(const Triangle& prim, DataTable& dataTable,
-            int subdivisionCount, size_t polygonCount)
+            int subdivisionCount, size_t polygonCount,
+            Interrupter* interrupter = nullptr)
             : mLocalDataTable(&dataTable)
             , mPrim(prim)
             , mSubdivisionCount(subdivisionCount)
             , mPolygonCount(polygonCount)
+            , mInterrupter(interrupter)
         {
         }
 
@@ -2069,15 +2071,16 @@ private:
 
                 voxelizeTriangle(mPrim, *dataPtr);
 
-            } else {
-                spawnTasks(mPrim, *mLocalDataTable, mSubdivisionCount, mPolygonCount);
+            } else if (!(mInterrupter && mInterrupter->wasInterrupted())) {
+                spawnTasks(mPrim, *mLocalDataTable, mSubdivisionCount, mPolygonCount, mInterrupter);
             }
         }
 
-        DataTable * const mLocalDataTable;
-        Triangle    const mPrim;
-        int         const mSubdivisionCount;
-        size_t      const mPolygonCount;
+        DataTable   * const mLocalDataTable;
+        Triangle      const mPrim;
+        int           const mSubdivisionCount;
+        size_t        const mPolygonCount;
+        Interrupter * const mInterrupter;
     }; // struct SubTask
 
     inline static int evalSubdivisionCount(const Triangle& prim)
@@ -2103,12 +2106,16 @@ private:
         if (subdivisionCount <= 0) {
             voxelizeTriangle(prim, data);
         } else {
-            spawnTasks(prim, *mDataTable, subdivisionCount, polygonCount);
+            spawnTasks(prim, *mDataTable, subdivisionCount, polygonCount, mInterrupter);
         }
     }
 
     static void spawnTasks(
-        const Triangle& mainPrim, DataTable& dataTable, int subdivisionCount, size_t polygonCount)
+        const Triangle& mainPrim,
+        DataTable& dataTable,
+        int subdivisionCount,
+        size_t polygonCount,
+        Interrupter* const interrupter)
     {
         subdivisionCount -= 1;
         polygonCount *= 4;
@@ -2128,36 +2135,36 @@ private:
         prim.b = ab;
         prim.c = ac;
 #ifdef OPENVDB_USE_TBB
-        tasks.run(SubTask(prim, dataTable, subdivisionCount, polygonCount));
+        tasks.run(SubTask(prim, dataTable, subdivisionCount, polygonCount, interrupter));
 #else
-		SubTask(prim, dataTable, subdivisionCount, polygonCount)();
+		SubTask(prim, dataTable, subdivisionCount, polygonCount, interrupter)();
 #endif
 
         prim.a = ab;
         prim.b = bc;
         prim.c = ac;
 #ifdef OPENVDB_USE_TBB
-        tasks.run(SubTask(prim, dataTable, subdivisionCount, polygonCount));
+        tasks.run(SubTask(prim, dataTable, subdivisionCount, polygonCount, interrupter));
 #else
-		SubTask(prim, dataTable, subdivisionCount, polygonCount)();
+		SubTask(prim, dataTable, subdivisionCount, polygonCount, interrupter)();
 #endif
 
         prim.a = ab;
         prim.b = mainPrim.b;
         prim.c = bc;
 #ifdef OPENVDB_USE_TBB
-        tasks.run(SubTask(prim, dataTable, subdivisionCount, polygonCount));
+        tasks.run(SubTask(prim, dataTable, subdivisionCount, polygonCount, interrupter));
 #else
-		SubTask(prim, dataTable, subdivisionCount, polygonCount)();
+		SubTask(prim, dataTable, subdivisionCount, polygonCount, interrupter)();
 #endif
 
         prim.a = ac;
         prim.b = bc;
         prim.c = mainPrim.c;
 #ifdef OPENVDB_USE_TBB
-        tasks.run(SubTask(prim, dataTable, subdivisionCount, polygonCount));
+        tasks.run(SubTask(prim, dataTable, subdivisionCount, polygonCount, interrupter));
 #else
-		SubTask(prim, dataTable, subdivisionCount, polygonCount)();
+		SubTask(prim, dataTable, subdivisionCount, polygonCount, interrupter)();
 #endif
 
 #ifdef OPENVDB_USE_TBB
