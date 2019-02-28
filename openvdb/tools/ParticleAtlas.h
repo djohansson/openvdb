@@ -1,6 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////
 //
-// Copyright (c) 2012-2018 DreamWorks Animation LLC
+// Copyright (c) 2012-2019 DreamWorks Animation LLC
 //
 // All rights reserved. This software is distributed under the
 // Mozilla Public License 2.0 ( http://www.mozilla.org/MPL/2.0/ )
@@ -901,7 +901,7 @@ template<typename PointIndexGridType>
 inline void
 ParticleAtlas<PointIndexGridType>::Iterator::updateFromLevel(size_t level)
 {
-    using TreeType = typename PointIndexGridType::TreeType;
+    using TreeT = typename PointIndexGridType::TreeType;
     using LeafNodeType = typename TreeType::LeafNodeType;
 
     this->clear();
@@ -909,8 +909,7 @@ ParticleAtlas<PointIndexGridType>::Iterator::updateFromLevel(size_t level)
     if (mAccessorListSize > 0) {
         const size_t levelIdx = std::min(mAccessorListSize - 1, level);
 
-        const TreeType& tree = mAtlas->pointIndexGrid(levelIdx).tree();
-
+        const TreeT& tree = mAtlas->pointIndexGrid(levelIdx).tree();
 
         std::vector<const LeafNodeType*> nodes;
         tree.getNodes(nodes);
@@ -1058,6 +1057,6 @@ ParticleAtlas<PointIndexGridType>::Iterator::worldSpaceSearchAndUpdate(
 
 #endif // OPENVDB_TOOLS_PARTICLE_ATLAS_HAS_BEEN_INCLUDED
 
-// Copyright (c) 2012-2018 DreamWorks Animation LLC
+// Copyright (c) 2012-2019 DreamWorks Animation LLC
 // All rights reserved. This software is distributed under the
 // Mozilla Public License 2.0 ( http://www.mozilla.org/MPL/2.0/ )

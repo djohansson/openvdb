@@ -1,6 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////
 //
-// Copyright (c) 2012-2018 DreamWorks Animation LLC
+// Copyright (c) 2012-2019 DreamWorks Animation LLC
 //
 // All rights reserved. This software is distributed under the
 // Mozilla Public License 2.0 ( http://www.mozilla.org/MPL/2.0/ )
@@ -248,8 +248,10 @@ struct PointsToMask<GridT, InterrupterT>::ReducePool
         : mOwnsGrid(false)
         , mGrid(grid)
     {
-        if ( grainSize == 0 ) {
-            for (auto i=pool.begin(); i!=pool.end(); ++i) mGrid->topologyUnion( *i );
+        if (grainSize == 0) {
+            for (typename PoolType::const_iterator i = pool.begin(); i != pool.end(); ++i) {
+                mGrid->topologyUnion(*i);
+            }
         } else {
             VecT grids( pool.size() );
             typename PoolType::iterator i = pool.begin();
@@ -285,6 +287,6 @@ struct PointsToMask<GridT, InterrupterT>::ReducePool
 
 #endif // OPENVDB_TOOLS_POINTSTOMASK_HAS_BEEN_INCLUDED
 
-// Copyright (c) 2012-2018 DreamWorks Animation LLC
+// Copyright (c) 2012-2019 DreamWorks Animation LLC
 // All rights reserved. This software is distributed under the
 // Mozilla Public License 2.0 ( http://www.mozilla.org/MPL/2.0/ )

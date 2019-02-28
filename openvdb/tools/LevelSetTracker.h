@@ -1,6 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////
 //
-// Copyright (c) 2012-2018 DreamWorks Animation LLC
+// Copyright (c) 2012-2019 DreamWorks Animation LLC
 //
 // All rights reserved. This software is distributed under the
 // Mozilla Public License 2.0 ( http://www.mozilla.org/MPL/2.0/ )
@@ -547,7 +547,7 @@ Normalizer(LevelSetTracker& tracker, const MaskT* mask)
     , mDt(tracker.voxelSize()*(TemporalScheme == math::TVD_RK1 ? 0.3f :
                                TemporalScheme == math::TVD_RK2 ? 0.9f : 1.0f))
     , mInvDx(1.0f/tracker.voxelSize())
-    , mTask(0)
+    , mTask(nullptr)
 {
 }
 
@@ -678,8 +678,6 @@ LevelSetTracker<GridT,InterruptT>::
 Normalizer<SpatialScheme, TemporalScheme, MaskT>::
 euler(const LeafRange& range, Index phiBuffer, Index resultBuffer)
 {
-    using VoxelIterT = typename LeafType::ValueOnCIter;
-
     mTracker.checkInterrupter();
 
     StencilT stencil(mTracker.grid());
@@ -688,7 +686,7 @@ euler(const LeafRange& range, Index phiBuffer, Index resultBuffer)
         const ValueType* phi = leafIter.buffer(phiBuffer).data();
         ValueType* result = leafIter.buffer(resultBuffer).data();
         if (mMask == nullptr) {
-            for (VoxelIterT iter = leafIter->cbeginValueOn(); iter; ++iter) {
+            for (auto iter = leafIter->cbeginValueOn(); iter; ++iter) {
                 stencil.moveTo(iter);
                 this->eval<Nominator, Denominator>(stencil, phi, result, iter.pos());
             }//loop over active voxels in the leaf of the level set
@@ -709,6 +707,6 @@ euler(const LeafRange& range, Index phiBuffer, Index resultBuffer)
 
 #endif // OPENVDB_TOOLS_LEVEL_SET_TRACKER_HAS_BEEN_INCLUDED
 
-// Copyright (c) 2012-2018 DreamWorks Animation LLC
+// Copyright (c) 2012-2019 DreamWorks Animation LLC
 // All rights reserved. This software is distributed under the
 // Mozilla Public License 2.0 ( http://www.mozilla.org/MPL/2.0/ )

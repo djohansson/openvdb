@@ -1,6 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////
 //
-// Copyright (c) 2012-2018 DreamWorks Animation LLC
+// Copyright (c) 2012-2019 DreamWorks Animation LLC
 //
 // All rights reserved. This software is distributed under the
 // Mozilla Public License 2.0 ( http://www.mozilla.org/MPL/2.0/ )
@@ -57,9 +57,12 @@
 
 #ifdef OPENVDB_USE_TBB
 #include <tbb/task_scheduler_init.h>
+#include <tbb/enumerable_thread_specific.h>
+#include <tbb/parallel_for.h>
 #endif
-
+#include <functional>
 #include <type_traits>
+#include <vector>
 
 
 namespace openvdb {
@@ -232,10 +235,10 @@ inline void deactivate(
 
 /// Mapping from a Log2Dim to a data type of size 2^Log2Dim bits
 template<Index Log2Dim> struct DimToWord {};
-template<> struct DimToWord<3> { typedef uint8_t Type; };
-template<> struct DimToWord<4> { typedef uint16_t Type; };
-template<> struct DimToWord<5> { typedef uint32_t Type; };
-template<> struct DimToWord<6> { typedef uint64_t Type; };
+template<> struct DimToWord<3> { using Type = uint8_t; };
+template<> struct DimToWord<4> { using Type = uint16_t; };
+template<> struct DimToWord<5> { using Type = uint32_t; };
+template<> struct DimToWord<6> { using Type = uint64_t; };
 
 
 ////////////////////////////////////////
@@ -245,7 +248,7 @@ template<typename TreeType>
 class Morphology
 {
 public:
-    typedef tree::LeafManager<TreeType> ManagerType;
+    using ManagerType = tree::LeafManager<TreeType>;
 
     Morphology(TreeType& tree):
         mOwnsManager(true), mManager(new ManagerType(tree)), mAcc(tree), mSteps(1) {}
@@ -277,9 +280,9 @@ protected:
 
     void doErosion(NearestNeighbors nn);
 
-    typedef typename TreeType::LeafNodeType LeafType;
-    typedef typename LeafType::NodeMaskType MaskType;
-    typedef tree::ValueAccessor<TreeType>   AccessorType;
+    using LeafType = typename TreeType::LeafNodeType;
+    using MaskType = typename LeafType::NodeMaskType;
+    using AccessorType = tree::ValueAccessor<TreeType>;
 
     const bool   mOwnsManager;
     ManagerType* mManager;
@@ -288,7 +291,7 @@ protected:
 
     static const int LEAF_DIM     = LeafType::DIM;
     static const int LEAF_LOG2DIM = LeafType::LOG2DIM;
-    typedef typename DimToWord<LEAF_LOG2DIM>::Type Word;
+    using Word = typename DimToWord<LEAF_LOG2DIM>::Type;
 
     struct Neighbor {
         LeafType* leaf;//null if a tile
@@ -389,10 +392,11 @@ protected:
         Word mask;
     };// LeafCache
 
-    struct ErodeVoxelsOp {
-        typedef BlockedRange<size_t> RangeT;
+    struct ErodeVoxelsOp
+    {
+        using RangeT = BlockedRange<size_t>;
         ErodeVoxelsOp(std::vector<MaskType>& masks, ManagerType& manager)
-            : mTask(0), mSavedMasks(masks) , mManager(manager) {}
+            : mTask(nullptr), mSavedMasks(masks) , mManager(manager) {}
         void runParallel(NearestNeighbors nn);
         void operator()(const RangeT& r) const {mTask(const_cast<ErodeVoxelsOp*>(this), r);}
         void erode6( const RangeT&) const;
@@ -893,7 +897,7 @@ template<typename TreeType>
 class ActivationOp
 {
 public:
-    typedef typename TreeType::ValueType ValueT;
+    using ValueT = typename TreeType::ValueType;
 
     ActivationOp(bool state, const ValueT& val, const ValueT& tol)
         : mActivate(state)
@@ -917,7 +921,7 @@ public:
 
     void operator()(const typename TreeType::LeafIter& lit) const
     {
-        typedef typename TreeType::LeafNodeType LeafT;
+        using LeafT = typename TreeType::LeafNodeType;
         LeafT& leaf = *lit;
         if (mActivate) {
             for (typename LeafT::ValueOffIter it = leaf.beginValueOff(); it; ++it) {
@@ -947,8 +951,8 @@ inline void
 activate(GridOrTree& gridOrTree, const typename GridOrTree::ValueType& value,
     const typename GridOrTree::ValueType& tolerance)
 {
-    typedef TreeAdapter<GridOrTree> Adapter;
-    typedef typename Adapter::TreeType TreeType;
+    using Adapter = TreeAdapter<GridOrTree>;
+    using TreeType = typename Adapter::TreeType;
 
     TreeType& tree = Adapter::tree(gridOrTree);
 
@@ -970,8 +974,8 @@ inline void
 deactivate(GridOrTree& gridOrTree, const typename GridOrTree::ValueType& value,
     const typename GridOrTree::ValueType& tolerance)
 {
-    typedef TreeAdapter<GridOrTree> Adapter;
-    typedef typename Adapter::TreeType TreeType;
+    using Adapter = TreeAdapter<GridOrTree>;
+    using TreeType = typename Adapter::TreeType;
 
     TreeType& tree = Adapter::tree(gridOrTree);
 
@@ -992,9 +996,9 @@ deactivate(GridOrTree& gridOrTree, const typename GridOrTree::ValueType& value,
 template<typename TreeT>
 class DilationOp
 {
-    typedef typename TreeT::template ValueConverter<ValueMask>::Type MaskT;
-    typedef EnumerableThreadSpecific<MaskT>							 PoolT;
-    typedef typename MaskT::LeafNodeType                             LeafT;
+    using MaskT = typename TreeT::template ValueConverter<ValueMask>::Type;
+    using PoolT = EnumerableThreadSpecific<MaskT>;
+    using LeafT = typename MaskT::LeafNodeType;
 
     // Very light-weight member data
     const int mIter;// number of iterations
@@ -1024,7 +1028,7 @@ public:
 
         delete [] mLeafs;// no more need for the array of leaf node pointers
 
-        typedef typename PoolT::iterator IterT;
+        using IterT = typename PoolT::iterator;
         for (IterT it=pool.begin(); it!=pool.end(); ++it) mask.merge(*it);// fast stealing
 
         if (mode == PRESERVE_TILES) tools::prune(mask);//multithreaded
@@ -1045,7 +1049,7 @@ private:
 
     // Simple wrapper of a raw double-pointer to mimic a std container
     struct MyArray {
-        typedef LeafT* value_type;//required by Tree::stealNodes
+        using value_type = LeafT*;//required by Tree::stealNodes
         value_type* ptr;
         MyArray(value_type* array) : ptr(array) {}
         void push_back(value_type leaf) { *ptr++ = leaf; }//required by Tree::stealNodes
@@ -1105,6 +1109,6 @@ dilateActiveValues(tree::LeafManager<TreeType>& manager,
 
 #endif // OPENVDB_TOOLS_MORPHOLOGY_HAS_BEEN_INCLUDED
 
-// Copyright (c) 2012-2018 DreamWorks Animation LLC
+// Copyright (c) 2012-2019 DreamWorks Animation LLC
 // All rights reserved. This software is distributed under the
 // Mozilla Public License 2.0 ( http://www.mozilla.org/MPL/2.0/ )
